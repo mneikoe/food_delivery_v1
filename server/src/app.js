@@ -33,18 +33,22 @@ app.use("/api/delivery", deliveryRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
-  res.json({ status: "OK", timestamp: new Date().toISOString(),"message": " food delivery v1 app webServer is running" });
+  res.json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    message: " food delivery v1 app webServer is running",
+  });
 });
 
 // Serve Vite dist folder
-app.use(express.static(path.join(__dirname, "../../web/dist")));
+app.use(express.static(path.join(__dirname, "../dist")));
 
 // SPA fallback - serve index.html for non-API routes
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api/")) {
     return next();
   }
-  res.sendFile(path.join(__dirname, "../../web/dist/index.html"));
+  res.sendFile(path.join(__dirname, "../dist/index.html"));
 });
 
 // Error handler
