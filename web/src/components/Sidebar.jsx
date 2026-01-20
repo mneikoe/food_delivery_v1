@@ -5,6 +5,7 @@ import {
   AppstoreOutlined,
   ShoppingOutlined,
   GiftOutlined,
+  TagOutlined,
   FileTextOutlined,
   UserOutlined,
   LogoutOutlined,
@@ -36,6 +37,11 @@ export default function Sidebar({ collapsed, onCollapse }) {
       key: '/coupons',
       icon: <GiftOutlined />,
       label: 'Coupons',
+    },
+    {
+      key: '/offers',
+      icon: <TagOutlined />,
+      label: 'Offers',
     },
     {
       key: '/orders',

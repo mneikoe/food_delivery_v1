@@ -3,6 +3,8 @@ const Address = require("../models/Address");
 const Category = require("../models/Category");
 const Product = require("../models/Product");
 const Order = require("../models/Order");
+const Offer = require("../models/Offer");
+const Review = require("../models/Review");
 const orderService = require("../services/orderService");
 const couponService = require("../services/couponService");
 const reverseGeocode = require("../utils/reverseGeocode");
@@ -446,6 +448,90 @@ exports.updateLocation = async (req, res) => {
 
     console.log("Returning location to frontend:", location);
     res.json({ location });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Offers
+exports.getOffers = async (req, res) => {
+  try {
+    const offers = await Offer.find({
+      isActive: true,
+      validFrom: { $lte: new Date() },
+      $or: [{ validUntil: { $gte: new Date() } }, { validUntil: null }],
+    })
+      .sort({ priority: -1, createdAt: -1 })
+      .select("-__v");
+    res.json(offers);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Reviews
+exports.createReview = async (req, res) => {
+  try {
+    const { productId, orderId, rating, comment } = req.body;
+
+    if (!productId || !orderId || !rating) {
+      return res.status(400).json({ error: "Product ID, Order ID, and rating are required" });
+    }
+
+    // Verify order belongs to user and is delivered
+    const order = await Order.findOne({
+      _id: orderId,
+      userId: req.user._id,
+      status: "DELIVERED",
+    });
+
+    if (!order) {
+      return res.status(400).json({ error: "Order not found or not delivered" });
+    }
+
+    // Check if product was in the order
+    const orderItem = order.items.find(
+      (item) => item.productId.toString() === productId
+    );
+
+    if (!orderItem) {
+      return res.status(400).json({ error: "Product not found in order" });
+    }
+
+    // Check if review already exists
+    const existingReview = await Review.findOne({
+      userId: req.user._id,
+      productId,
+      orderId,
+    });
+
+    if (existingReview) {
+      return res.status(400).json({ error: "Review already exists for this order" });
+    }
+
+    const review = new Review({
+      userId: req.user._id,
+      productId,
+      orderId,
+      rating,
+      comment: comment || "",
+    });
+
+    await review.save();
+    res.status(201).json(review);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.getProductReviews = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const reviews = await Review.find({ productId })
+      .populate("userId", "name")
+      .sort({ createdAt: -1 })
+      .select("-__v");
+    res.json(reviews);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

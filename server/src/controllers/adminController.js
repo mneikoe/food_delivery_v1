@@ -1,6 +1,7 @@
 const Category = require("../models/Category");
 const Product = require("../models/Product");
 const Coupon = require("../models/Coupon");
+const Offer = require("../models/Offer");
 const Order = require("../models/Order");
 const User = require("../models/User");
 const orderService = require("../services/orderService");
@@ -363,6 +364,57 @@ exports.updateDeliveryPartnerStatus = async (req, res) => {
     }
 
     res.json(deliveryPartner);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Offers
+exports.createOffer = async (req, res) => {
+  try {
+    const offer = new Offer(req.body);
+    await offer.save();
+    res.status(201).json(offer);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.getOffers = async (req, res) => {
+  try {
+    const offers = await Offer.find().sort({ priority: -1, createdAt: -1 });
+    res.json(offers);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateOffer = async (req, res) => {
+  try {
+    const offer = await Offer.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!offer) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+
+    res.json(offer);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.deleteOffer = async (req, res) => {
+  try {
+    const offer = await Offer.findByIdAndDelete(req.params.id);
+
+    if (!offer) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+
+    res.json({ success: true });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

@@ -89,11 +89,17 @@ const orderSchema = new mongoose.Schema({
 // Generate order ID before saving
 orderSchema.pre("save", function (next) {
   if (!this.orderId) {
-    const date = new Date();
-    const timestamp = date.getTime();
-    this.orderId = `ORD-${timestamp}-${Math.floor(Math.random() * 1000)}`;
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let result = "";
+
+    for (let i = 0; i < 6; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    this.orderId = `ORD-${result}`;
   }
   next();
 });
+
 
 module.exports = mongoose.model("Order", orderSchema);

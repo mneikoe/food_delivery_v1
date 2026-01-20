@@ -57,4 +57,10 @@ router.patch(
   adminController.updateDeliveryPartnerStatus
 );
 
+// Offers
+router.post("/offers", adminController.createOffer);
+router.get("/offers", adminController.getOffers);
+router.put("/offers/:id", adminController.updateOffer);
+router.delete("/offers/:id", adminController.deleteOffer);
+
 module.exports = router;

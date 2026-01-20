@@ -82,4 +82,10 @@ export const updateDeliveryPartner = (id, data) => api.put(`/admin/delivery-part
 export const updateDeliveryPartnerStatus = (id, isActive) => 
   api.patch(`/admin/delivery-partners/${id}/status`, { isActive });
 
+// Offers
+export const getOffers = () => api.get('/admin/offers');
+export const createOffer = (data) => api.post('/admin/offers', data);
+export const updateOffer = (id, data) => api.put(`/admin/offers/${id}`, data);
+export const deleteOffer = (id) => api.delete(`/admin/offers/${id}`);
+
 export default api;

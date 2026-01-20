@@ -36,6 +36,13 @@ router.post("/orders/:id/cancel", userController.cancelOrder);
 // Coupons
 router.post("/coupons/validate", userController.validateCoupon);
 
+// Offers
+router.get("/offers", userController.getOffers);
+
+// Reviews
+router.post("/reviews", userController.createReview);
+router.get("/products/:productId/reviews", userController.getProductReviews);
+
 // Tracking
 router.get("/orders/:id/track", userController.trackOrder);
 

@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import Categories from './pages/Categories';
 import Products from './pages/Products';
 import Coupons from './pages/Coupons';
+import Offers from './pages/Offers';
 import Orders from './pages/Orders';
 import DeliveryPartners from './pages/DeliveryPartners';
 import './App.css';
@@ -42,6 +43,7 @@ function App() {
                         <Route path="/categories" element={<Categories />} />
                         <Route path="/products" element={<Products />} />
                         <Route path="/coupons" element={<Coupons />} />
+                        <Route path="/offers" element={<Offers />} />
                         <Route path="/orders" element={<Orders />} />
                         <Route path="/delivery-partners" element={<DeliveryPartners />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
