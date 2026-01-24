@@ -303,6 +303,11 @@ exports.createOrder = async (req, res) => {
     }
 
     // Create order
+    const deliveryFee = 28;
+    const subtotalWithFee = cart.subtotal + deliveryFee;
+    const tax = subtotalWithFee * 0.05; // 5% tax
+    const totalAmount = subtotalWithFee - discount + tax;
+    
     const orderData = {
       deliveryAddress,
       items: cart.items.map((item) => ({
@@ -312,10 +317,11 @@ exports.createOrder = async (req, res) => {
         quantity: item.quantity,
       })),
       subtotal: cart.subtotal,
-      deliveryFee: 30,
+      deliveryFee: deliveryFee,
+      tax: tax,
       discount: discount,
       couponCode: appliedCouponCode,
-      totalAmount: cart.subtotal + 30 - discount,
+      totalAmount: totalAmount,
       paymentMethod,
     };
 

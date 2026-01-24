@@ -37,7 +37,12 @@ const orderSchema = new mongoose.Schema({
   },
   deliveryFee: {
     type: Number,
-    default: 30,
+    default: 28,
+  },
+  tax: {
+    type: Number,
+    default: 0,
+    min: 0,
   },
   discount: {
     type: Number,
