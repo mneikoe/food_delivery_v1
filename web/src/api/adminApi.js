@@ -24,14 +24,33 @@ api.interceptors.request.use(
   }
 );
 
-// Handle 401/403 errors
+// Handle 401/403/429 errors
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 429) {
+      // Rate limit exceeded
+      const retryAfter = error.response.data?.retryAfter || 60;
+      const minutes = Math.ceil(retryAfter / 60);
+      
+      // Show user-friendly message
+      const message = `Too many requests. Please wait ${minutes} minute${minutes > 1 ? 's' : ''} and try again.`;
+      
+      // You can integrate with Ant Design message component if available
+      if (window.antMessage) {
+        window.antMessage.warning(message, 5);
+      } else {
+        alert(message);
+      }
+      
+      return Promise.reject(error);
+    }
+    
     if (error.response?.status === 401 || error.response?.status === 403) {
       localStorage.removeItem('admin_token');
-      window.location.href = '/login';
+      window.location.href = '/admin/login';
     }
+    
     return Promise.reject(error);
   }
 );

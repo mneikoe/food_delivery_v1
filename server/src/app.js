@@ -25,14 +25,29 @@ app.use(express.json());
 // Rate limiting - Configured for proxy environment
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
+  max: 500, // Increased: 500 requests per window (was 100)
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   // Use X-Forwarded-For header to get client IP (when behind proxy)
   skip: (req) => {
-    // Skip rate limiting for health check
-    return req.path === '/health';
+    // Skip rate limiting for health check and public endpoints
+    return req.path === '/health' || req.path === '/api/public/apk-info';
   },
+  // Custom handler for rate limit exceeded
+  handler: (req, res) => {
+    const retryAfter = Math.ceil(req.rateLimit.resetTime / 1000 - Date.now() / 1000);
+    res.status(429).json({
+      error: 'Too Many Requests',
+      message: 'You have exceeded the rate limit. Please try again later.',
+      retryAfter: retryAfter > 0 ? retryAfter : 60, // seconds
+      limit: req.rateLimit.limit,
+      remaining: 0,
+      resetTime: new Date(req.rateLimit.resetTime).toISOString(),
+    });
+  },
+  // Only count failed requests (4xx, 5xx) - successful requests don't count
+  skipSuccessfulRequests: true, // Changed: don't count successful requests
+  skipFailedRequests: false,
 });
 app.use("/api/", limiter);
 
