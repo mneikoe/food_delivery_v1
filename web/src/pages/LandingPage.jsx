@@ -256,7 +256,7 @@ export default function LandingPage() {
                 <div className="hero-image-container">
                   <div className="hero-image-frame">
                     <img 
-                      src="https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=600&q=80" 
+                      src="https://img.freepik.com/premium-photo/food-photography-delicious-food-presentation-images_1301985-137.jpg" 
                       alt="Delicious food presentation" 
                       className="hero-image"
                     />
