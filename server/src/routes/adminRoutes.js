@@ -63,4 +63,9 @@ router.get("/offers", adminController.getOffers);
 router.put("/offers/:id", adminController.updateOffer);
 router.delete("/offers/:id", adminController.deleteOffer);
 
+// APK Management
+router.post("/apk-upload", adminController.uploadApk);
+router.get("/apk-info", adminController.getApkInfo);
+router.delete("/apk", adminController.deleteApk);
+
 module.exports = router;

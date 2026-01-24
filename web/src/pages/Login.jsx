@@ -33,7 +33,7 @@ export default function Login() {
       const response = await login(email, values.otp);
       if (response.token) {
         message.success('Login successful');
-        navigate('/');
+        navigate('/admin');
       }
     } catch (error) {
       message.error(error.response?.data?.error || 'Invalid OTP');

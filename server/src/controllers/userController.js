@@ -22,7 +22,7 @@ exports.getProfile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const updates = req.body;
-    const allowedUpdates = ["name", "email"];
+    const allowedUpdates = ["name", "email", "phone"];
     const filteredUpdates = {};
 
     Object.keys(updates).forEach((key) => {
@@ -226,8 +226,14 @@ exports.updateCartItem = async (req, res) => {
 // Orders
 exports.createOrder = async (req, res) => {
   try {
-    const { addressId, paymentMethod = "COD" } = req.body;
+    const { addressId, paymentMethod = "COD", couponCode } = req.body;
     const userId = req.user._id;
+
+    // Check if user has phone number
+    const user = await User.findById(userId);
+    if (!user.phone || user.phone.trim() === "") {
+      return res.status(400).json({ error: "Phone number is required to place an order" });
+    }
 
     // Get cart
     const cart = userCarts[userId];
@@ -271,6 +277,30 @@ exports.createOrder = async (req, res) => {
       };
     }
 
+    // Calculate discount if coupon is provided
+    let discount = 0;
+    let appliedCouponCode = null;
+
+    if (couponCode && couponCode.trim() !== "") {
+      try {
+        const validation = await couponService.validateCoupon(
+          couponCode,
+          cart.subtotal
+        );
+        discount = validation.discount;
+        appliedCouponCode = validation.code;
+
+        // Increment coupon usage count
+        const Coupon = require("../models/Coupon");
+        await Coupon.findOneAndUpdate(
+          { code: appliedCouponCode },
+          { $inc: { usedCount: 1 } }
+        );
+      } catch (error) {
+        return res.status(400).json({ error: error.message });
+      }
+    }
+
     // Create order
     const orderData = {
       deliveryAddress,
@@ -282,7 +312,9 @@ exports.createOrder = async (req, res) => {
       })),
       subtotal: cart.subtotal,
       deliveryFee: 30,
-      totalAmount: cart.subtotal + 30,
+      discount: discount,
+      couponCode: appliedCouponCode,
+      totalAmount: cart.subtotal + 30 - discount,
       paymentMethod,
     };
 
@@ -368,6 +400,20 @@ exports.validateCoupon = async (req, res) => {
 
     const validation = await couponService.validateCoupon(code, orderAmount);
     res.json(validation);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.getAvailableCoupons = async (req, res) => {
+  try {
+    const Coupon = require("../models/Coupon");
+    const coupons = await Coupon.find({
+      isActive: true,
+      validFrom: { $lte: new Date() },
+      $or: [{ validUntil: { $gte: new Date() } }, { validUntil: null }],
+    }).select("code discountType discountValue minOrderValue maxDiscount validUntil");
+    res.json(coupons);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -532,6 +578,26 @@ exports.getProductReviews = async (req, res) => {
       .sort({ createdAt: -1 })
       .select("-__v");
     res.json(reviews);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// APK Info - Public endpoint (no auth required)
+exports.getApkInfo = async (req, res) => {
+  try {
+    // For now, return stored APK info from a simple JSON file or database
+    // In production, you'd store this in database
+    const fs = require('fs');
+    const path = require('path');
+    const apkInfoPath = path.join(__dirname, '../../apk-info.json');
+    
+    if (fs.existsSync(apkInfoPath)) {
+      const apkInfo = JSON.parse(fs.readFileSync(apkInfoPath, 'utf8'));
+      res.json(apkInfo);
+    } else {
+      res.json({ available: false });
+    }
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

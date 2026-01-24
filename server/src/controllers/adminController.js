@@ -419,3 +419,60 @@ exports.deleteOffer = async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 };
+
+// APK Management
+exports.uploadApk = async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Store APK info (in production, use proper file storage like S3)
+    const apkInfo = {
+      name: req.body.name || 'app-release.apk',
+      size: req.body.size || '0 MB',
+      uploadDate: new Date().toISOString(),
+      url: req.body.url || '/app-release.apk',
+      available: true
+    };
+    
+    const apkInfoPath = path.join(__dirname, '../../apk-info.json');
+    fs.writeFileSync(apkInfoPath, JSON.stringify(apkInfo, null, 2));
+    
+    res.json(apkInfo);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.getApkInfo = async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const apkInfoPath = path.join(__dirname, '../../apk-info.json');
+    
+    if (fs.existsSync(apkInfoPath)) {
+      const apkInfo = JSON.parse(fs.readFileSync(apkInfoPath, 'utf8'));
+      res.json(apkInfo);
+    } else {
+      res.json({ available: false });
+    }
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.deleteApk = async (req, res) => {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const apkInfoPath = path.join(__dirname, '../../apk-info.json');
+    
+    if (fs.existsSync(apkInfoPath)) {
+      fs.unlinkSync(apkInfoPath);
+    }
+    
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};

@@ -8,6 +8,7 @@ import {
   TagOutlined,
   FileTextOutlined,
   UserOutlined,
+  SettingOutlined,
   LogoutOutlined,
 } from '@ant-design/icons';
 
@@ -19,39 +20,44 @@ export default function Sidebar({ collapsed, onCollapse }) {
 
   const menuItems = [
     {
-      key: '/',
+      key: '/admin',
       icon: <DashboardOutlined />,
       label: 'Dashboard',
     },
     {
-      key: '/categories',
+      key: '/admin/categories',
       icon: <AppstoreOutlined />,
       label: 'Categories',
     },
     {
-      key: '/products',
+      key: '/admin/products',
       icon: <ShoppingOutlined />,
       label: 'Products',
     },
     {
-      key: '/coupons',
+      key: '/admin/coupons',
       icon: <GiftOutlined />,
       label: 'Coupons',
     },
     {
-      key: '/offers',
+      key: '/admin/offers',
       icon: <TagOutlined />,
       label: 'Offers',
     },
     {
-      key: '/orders',
+      key: '/admin/orders',
       icon: <FileTextOutlined />,
       label: 'Orders',
     },
     {
-      key: '/delivery-partners',
+      key: '/admin/delivery-partners',
       icon: <UserOutlined />,
       label: 'Delivery Partners',
+    },
+    {
+      key: '/admin/app-settings',
+      icon: <SettingOutlined />,
+      label: 'App Settings',
     },
     {
       type: 'divider',
@@ -67,7 +73,7 @@ export default function Sidebar({ collapsed, onCollapse }) {
   const handleMenuClick = ({ key }) => {
     if (key === 'logout') {
       localStorage.removeItem('admin_token');
-      navigate('/login');
+      navigate('/admin/login');
     } else {
       navigate(key);
     }
@@ -79,6 +85,8 @@ export default function Sidebar({ collapsed, onCollapse }) {
       collapsed={collapsed}
       onCollapse={onCollapse}
       width={250}
+      breakpoint="lg"
+      collapsedWidth={80}
       style={{
         overflow: 'auto',
         height: '100vh',

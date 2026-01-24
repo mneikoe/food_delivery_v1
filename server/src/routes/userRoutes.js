@@ -35,6 +35,7 @@ router.post("/orders/:id/cancel", userController.cancelOrder);
 
 // Coupons
 router.post("/coupons/validate", userController.validateCoupon);
+router.get("/coupons", userController.getAvailableCoupons);
 
 // Offers
 router.get("/offers", userController.getOffers);
@@ -48,6 +49,9 @@ router.get("/orders/:id/track", userController.trackOrder);
 
 // Location
 router.post("/location/update", userController.updateLocation);
+
+// APK Info (public endpoint)
+router.get("/apk-info", userController.getApkInfo);
 
 // FCM Token (shared with delivery)
 //router.post("/fcm-token", userController.updateFCMToken);

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
 
 // Create axios instance with auth interceptor
 const api = axios.create({
@@ -87,5 +87,10 @@ export const getOffers = () => api.get('/admin/offers');
 export const createOffer = (data) => api.post('/admin/offers', data);
 export const updateOffer = (id, data) => api.put(`/admin/offers/${id}`, data);
 export const deleteOffer = (id) => api.delete(`/admin/offers/${id}`);
+
+// APK Management
+export const uploadApkInfo = (data) => api.post('/admin/apk-upload', data);
+export const getApkInfo = () => api.get('/admin/apk-info');
+export const deleteApkInfo = () => api.delete('/admin/apk');
 
 export default api;
