@@ -6,7 +6,7 @@ dist/
 # APK uploads
 server/uploads/
 server/apk-info.json
-server/dist/
+
 
 # Web build artifacts
 web/dist/
