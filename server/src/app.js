@@ -13,15 +13,26 @@ const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 
+// Trust proxy - Required when behind Nginx/reverse proxy
+// This allows Express to trust X-Forwarded-* headers
+app.set('trust proxy', 1);
+
 // Security middleware
 //app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
-// Rate limiting
+// Rate limiting - Configured for proxy environment
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  // Use X-Forwarded-For header to get client IP (when behind proxy)
+  skip: (req) => {
+    // Skip rate limiting for health check
+    return req.path === '/health';
+  },
 });
 app.use("/api/", limiter);
 
