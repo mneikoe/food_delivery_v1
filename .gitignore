@@ -1,7 +1,7 @@
 node_modules/
 .env
 .DS_Store
-dist/
+
 
 # APK uploads
 server/uploads/
@@ -9,7 +9,7 @@ server/apk-info.json
 
 
 # Web build artifacts
-web/dist/
+
 
 # Client folders
 client
