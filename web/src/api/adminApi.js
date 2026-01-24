@@ -89,7 +89,11 @@ export const updateOffer = (id, data) => api.put(`/admin/offers/${id}`, data);
 export const deleteOffer = (id) => api.delete(`/admin/offers/${id}`);
 
 // APK Management
-export const uploadApkInfo = (data) => api.post('/admin/apk-upload', data);
+export const uploadApkInfo = (formData) => api.post('/admin/apk-upload', formData, {
+  headers: {
+    'Content-Type': 'multipart/form-data',
+  },
+});
 export const getApkInfo = () => api.get('/admin/apk-info');
 export const deleteApkInfo = () => api.delete('/admin/apk');
 

@@ -426,20 +426,30 @@ exports.uploadApk = async (req, res) => {
     const fs = require('fs');
     const path = require('path');
     
-    // Store APK info (in production, use proper file storage like S3)
+    console.log('📱 APK Upload Request:', req.file);
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No APK file uploaded' });
+    }
+    
+    // Store APK info with actual file details
     const apkInfo = {
-      name: req.body.name || 'app-release.apk',
-      size: req.body.size || '0 MB',
+      name: req.file.originalname,
+      size: (req.file.size / (1024 * 1024)).toFixed(2) + ' MB',
       uploadDate: new Date().toISOString(),
-      url: req.body.url || '/app-release.apk',
-      available: true
+      url: `/uploads/${req.file.filename}`,
+      available: true,
+      filename: req.file.filename,
+      path: req.file.path
     };
     
     const apkInfoPath = path.join(__dirname, '../../apk-info.json');
     fs.writeFileSync(apkInfoPath, JSON.stringify(apkInfo, null, 2));
     
+    console.log('✅ APK uploaded successfully:', apkInfo);
     res.json(apkInfo);
   } catch (error) {
+    console.error('❌ APK upload error:', error);
     res.status(400).json({ error: error.message });
   }
 };
@@ -467,12 +477,24 @@ exports.deleteApk = async (req, res) => {
     const path = require('path');
     const apkInfoPath = path.join(__dirname, '../../apk-info.json');
     
+    // Read APK info to get file path
     if (fs.existsSync(apkInfoPath)) {
+      const apkInfo = JSON.parse(fs.readFileSync(apkInfoPath, 'utf8'));
+      
+      // Delete the actual APK file
+      if (apkInfo.path && fs.existsSync(apkInfo.path)) {
+        fs.unlinkSync(apkInfo.path);
+        console.log('🗑️ Deleted APK file:', apkInfo.path);
+      }
+      
+      // Delete the info file
       fs.unlinkSync(apkInfoPath);
+      console.log('🗑️ Deleted APK info');
     }
     
     res.json({ success: true });
   } catch (error) {
+    console.error('❌ APK delete error:', error);
     res.status(400).json({ error: error.message });
   }
 };

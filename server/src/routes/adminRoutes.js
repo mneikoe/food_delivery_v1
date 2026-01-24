@@ -3,6 +3,7 @@ const router = express.Router();
 const auth = require("../middleware/auth");
 const roleCheck = require("../middleware/role");
 const adminController = require("../controllers/adminController");
+const upload = require("../middleware/upload");
 
 // All routes require authentication and ADMIN role
 router.use(auth);
@@ -64,7 +65,7 @@ router.put("/offers/:id", adminController.updateOffer);
 router.delete("/offers/:id", adminController.deleteOffer);
 
 // APK Management
-router.post("/apk-upload", adminController.uploadApk);
+router.post("/apk-upload", upload.single('apk'), adminController.uploadApk);
 router.get("/apk-info", adminController.getApkInfo);
 router.delete("/apk", adminController.deleteApk);
 

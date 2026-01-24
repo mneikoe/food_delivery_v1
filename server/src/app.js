@@ -58,6 +58,9 @@ app.get("/health", (req, res) => {
   });
 });
 
+// Serve uploaded files (APK downloads)
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
 // Serve Vite dist folder
 app.use(express.static(path.join(__dirname, "../dist")));
 

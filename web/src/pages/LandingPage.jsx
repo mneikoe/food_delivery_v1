@@ -70,22 +70,25 @@ export default function LandingPage() {
 
   const handleDownloadApp = () => {
     if (apkInfo && apkInfo.available && apkInfo.url) {
-      // Create a link and trigger download
-      const link = document.createElement('a');
-      link.href = apkInfo.url;
-      link.download = apkInfo.name || 'app-release.apk';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      console.log('🔽 Starting APK download:', apkInfo);
+      console.log('📥 Download URL:', apkInfo.url);
       
-      message.success({
-        content: 'Download started! Thank you for choosing Chatora Adda.',
-        duration: 3,
-        style: { 
-          borderRadius: '8px'
-        }
-      });
+      // Direct download using relative URL (Vite will proxy it)
+      window.location.href = apkInfo.url;
+      
+      console.log('✅ Download initiated');
+      
+      setTimeout(() => {
+        message.success({
+          content: 'Download started! Thank you for choosing Chatora Adda.',
+          duration: 3,
+          style: { 
+            borderRadius: '8px'
+          }
+        });
+      }, 500);
     } else {
+      console.log('❌ APK not available:', apkInfo);
       message.info({
         content: 'The app will be available soon. Thank you for your interest!',
         duration: 3,

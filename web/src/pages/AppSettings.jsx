@@ -28,20 +28,24 @@ export default function AppSettings() {
   const handleUpload = async ({ file, onSuccess, onError }) => {
     setUploading(true);
     try {
-      const apkData = {
-        name: file.name,
-        size: (file.size / (1024 * 1024)).toFixed(2) + ' MB',
-        url: '/app-release.apk' // In production, upload to S3 and get URL
-      };
+      console.log('📱 Uploading APK:', file.name, 'Size:', (file.size / (1024 * 1024)).toFixed(2) + ' MB');
       
-      await uploadApkInfo(apkData);
-      setApkInfo({ ...apkData, uploadDate: new Date().toISOString(), available: true });
+      // Create FormData and append the actual file
+      const formData = new FormData();
+      formData.append('apk', file);
       
-      message.success('APK uploaded successfully!');
+      console.log('📤 Sending APK to server...');
+      const response = await uploadApkInfo(formData);
+      
+      console.log('✅ Upload response:', response.data);
+      setApkInfo(response.data);
+      
+      message.success(`APK uploaded successfully! Size: ${response.data.size}`);
       setFileList([]);
       onSuccess();
     } catch (error) {
-      message.error('Failed to upload APK');
+      console.error('❌ Upload failed:', error);
+      message.error('Failed to upload APK: ' + (error.response?.data?.error || error.message));
       onError(error);
     } finally {
       setUploading(false);
@@ -172,7 +176,7 @@ export default function AppSettings() {
             <Text type="secondary">Direct Download URL:</Text>
             <br />
             <Text code copyable style={{ fontSize: 12 }}>
-              {window.location.origin + '/app-release.apk'}
+              {window.location.origin + apkInfo.url}
             </Text>
           </div>
         )}

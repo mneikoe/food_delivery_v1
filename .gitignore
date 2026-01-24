@@ -1,3 +1,11 @@
 node_modules/
-client
+.env
+.DS_Store
+dist/
+
+# APK uploads
+server/uploads/
+server/apk-info.json
+
+# Client folders
 client
