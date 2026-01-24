@@ -61,14 +61,40 @@ app.get("/health", (req, res) => {
 // Serve uploaded files (APK downloads)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
-// Serve Vite dist folder
-app.use(express.static(path.join(__dirname, "../dist")));
+// Serve static files from Vite dist folder with proper MIME types
+app.use(express.static(path.join(__dirname, "../dist"), {
+  setHeaders: (res, filepath) => {
+    // Set proper MIME types for JavaScript modules
+    if (filepath.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+    } else if (filepath.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css; charset=UTF-8');
+    } else if (filepath.endsWith('.json')) {
+      res.setHeader('Content-Type', 'application/json; charset=UTF-8');
+    }
+  }
+}));
 
-// SPA fallback - serve index.html for non-API routes
+// SPA fallback - serve index.html for non-API and non-static routes
 app.get("*", (req, res, next) => {
+  // Skip API routes
   if (req.path.startsWith("/api/")) {
     return next();
   }
+  
+  // Skip static asset routes
+  if (req.path.startsWith("/assets/") || 
+      req.path.startsWith("/uploads/") ||
+      req.path.endsWith('.js') || 
+      req.path.endsWith('.css') ||
+      req.path.endsWith('.svg') ||
+      req.path.endsWith('.png') ||
+      req.path.endsWith('.jpg') ||
+      req.path.endsWith('.ico')) {
+    return next();
+  }
+  
+  // Send index.html for SPA routes
   res.sendFile(path.join(__dirname, "../dist/index.html"));
 });
 
