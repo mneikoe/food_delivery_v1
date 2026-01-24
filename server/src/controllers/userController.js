@@ -285,7 +285,8 @@ exports.createOrder = async (req, res) => {
       try {
         const validation = await couponService.validateCoupon(
           couponCode,
-          cart.subtotal
+          cart.subtotal,
+          userId
         );
         discount = validation.discount;
         appliedCouponCode = validation.code;
@@ -393,12 +394,13 @@ exports.cancelOrder = async (req, res) => {
 exports.validateCoupon = async (req, res) => {
   try {
     const { code, orderAmount } = req.body;
+    const userId = req.user._id;
 
     if (!code || !orderAmount) {
       return res.status(400).json({ error: "Code and order amount required" });
     }
 
-    const validation = await couponService.validateCoupon(code, orderAmount);
+    const validation = await couponService.validateCoupon(code, orderAmount, userId);
     res.json(validation);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -408,6 +410,17 @@ exports.validateCoupon = async (req, res) => {
 exports.getAvailableCoupons = async (req, res) => {
   try {
     const Coupon = require("../models/Coupon");
+    const userId = req.user._id;
+    
+    // Check if user has already placed an order
+    const orderCount = await Order.countDocuments({ userId, status: { $nin: ['CANCELLED'] } });
+    
+    // If user has already placed at least one order, return empty coupons
+    if (orderCount > 0) {
+      return res.json([]);
+    }
+    
+    // Only show coupons for first-time users
     const coupons = await Coupon.find({
       isActive: true,
       validFrom: { $lte: new Date() },
