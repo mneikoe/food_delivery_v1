@@ -84,8 +84,16 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Serve uploaded files (APK downloads)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Serve uploaded files (APK downloads) - with proper MIME type
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  setHeaders: (res, filepath) => {
+    // Set proper MIME type for APK files
+    if (filepath.endsWith('.apk')) {
+      res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+      res.setHeader('Content-Disposition', 'attachment; filename="app-release.apk"');
+    }
+  }
+}));
 
 // Serve static files from Vite dist folder with proper MIME types
 app.use(express.static(path.join(__dirname, "../dist"), {
