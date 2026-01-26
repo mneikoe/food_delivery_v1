@@ -93,7 +93,7 @@ export default function AppSettings() {
         title={
           <Space>
             <AndroidOutlined style={{ fontSize: 24, color: '#3DDC84' }} />
-            <Text strong>Android APK Management</Text>
+            <Text strong>Android APK Management For Admin</Text>
           </Space>
         }
         style={{ marginBottom: 24 }}
