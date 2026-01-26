@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, Upload, Button, message, Typography, Space, Divider } from 'antd';
+import { Card, Upload, Button, message, Typography, Space, Divider, Input } from 'antd';
 import { UploadOutlined, AndroidOutlined, DeleteOutlined } from '@ant-design/icons';
 import { uploadApkInfo, getApkInfo, deleteApkInfo } from '../api/adminApi';
 
@@ -9,6 +9,7 @@ export default function AppSettings() {
   const [uploading, setUploading] = useState(false);
   const [apkInfo, setApkInfo] = useState(null);
   const [fileList, setFileList] = useState([]);
+  const [version, setVersion] = useState('1.0.0');
 
   useEffect(() => {
     fetchApkInfo();
@@ -19,6 +20,10 @@ export default function AppSettings() {
       const response = await getApkInfo();
       if (response.data && response.data.available) {
         setApkInfo(response.data);
+        // Set version from existing APK info if available
+        if (response.data.version) {
+          setVersion(response.data.version);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch APK info:', error);
@@ -33,8 +38,9 @@ export default function AppSettings() {
       // Create FormData and append the actual file
       const formData = new FormData();
       formData.append('apk', file);
+      formData.append('version', version); // Add version to form data
       
-      console.log('📤 Sending APK to server...');
+      console.log('📤 Sending APK to server with version:', version);
       const response = await uploadApkInfo(formData);
       
       console.log('✅ Upload response:', response.data);
@@ -107,6 +113,16 @@ export default function AppSettings() {
                     <br />
                     <Text strong>{apkInfo.size}</Text>
                   </div>
+                  {apkInfo.version && (
+                    <>
+                      <Divider type="vertical" style={{ height: 40 }} />
+                      <div>
+                        <Text type="secondary">Version:</Text>
+                        <br />
+                        <Text strong>{apkInfo.version}</Text>
+                      </div>
+                    </>
+                  )}
                   <Divider type="vertical" style={{ height: 40 }} />
                   <div>
                     <Text type="secondary">Upload Date:</Text>
@@ -147,6 +163,23 @@ export default function AppSettings() {
             <Paragraph>
               Upload your Android APK file here. Users will be able to download this APK from the landing page.
             </Paragraph>
+            
+            <Space direction="vertical" size="middle" style={{ width: '100%', marginBottom: 16 }}>
+              <div>
+                <Text strong>App Version:</Text>
+                <br />
+                <Input
+                  placeholder="e.g., 1.0.0"
+                  value={version}
+                  onChange={(e) => setVersion(e.target.value)}
+                  style={{ marginTop: 8, maxWidth: 200 }}
+                />
+                <Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
+                  Version format: X.Y.Z (e.g., 1.0.0, 1.0.1, 1.1.0)
+                </Text>
+              </div>
+            </Space>
+            
             <Upload {...uploadProps}>
               <Button 
                 icon={<UploadOutlined />} 
@@ -161,6 +194,7 @@ export default function AppSettings() {
                 <li>Only .apk files are accepted</li>
                 <li>Maximum file size: 100MB</li>
                 <li>Make sure the APK is signed and tested before uploading</li>
+                <li>Version number is required for update notifications</li>
               </ul>
             </Paragraph>
           </div>

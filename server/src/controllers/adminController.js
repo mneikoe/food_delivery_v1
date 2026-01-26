@@ -432,6 +432,9 @@ exports.uploadApk = async (req, res) => {
       return res.status(400).json({ error: 'No APK file uploaded' });
     }
     
+    // Get version from request body or use default
+    const version = req.body.version || '1.0.0';
+    
     // Store APK info with actual file details
     const apkInfo = {
       name: req.file.originalname,
@@ -440,7 +443,8 @@ exports.uploadApk = async (req, res) => {
       url: `/uploads/${req.file.filename}`,
       available: true,
       filename: req.file.filename,
-      path: req.file.path
+      path: req.file.path,
+      version: version // Add version to APK info
     };
     
     const apkInfoPath = path.join(__dirname, '../../apk-info.json');
