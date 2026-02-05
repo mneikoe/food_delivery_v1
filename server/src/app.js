@@ -30,8 +30,8 @@ const limiter = rateLimit({
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
   // Use X-Forwarded-For header to get client IP (when behind proxy)
   skip: (req) => {
-    // Skip rate limiting for health check and public endpoints
-    return req.path === '/health' || req.path === '/api/public/apk-info' || req.path === '/api/public/order-window';
+    // Skip rate limiting for health check, public endpoints, and large APK upload
+    return req.path === '/health' || req.path === '/api/public/apk-info' || req.path === '/api/public/order-window' || req.path === '/api/admin/apk-upload';
   },
   // Custom handler for rate limit exceeded
   handler: (req, res) => {

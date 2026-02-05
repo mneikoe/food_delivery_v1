@@ -110,6 +110,9 @@ server {
     ssl_certificate /path/to/ssl/cert.pem;
     ssl_certificate_key /path/to/ssl/key.pem;
     
+    # Allow large APK uploads (61MB+). Default is 1m; set before any location that receives uploads.
+    client_max_body_size 100m;
+    
     # Security Headers
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
@@ -120,6 +123,20 @@ server {
         proxy_pass http://localhost:8080;
         proxy_cache_valid 200 30d;
         add_header Cache-Control "public, max-age=2592000";
+    }
+    
+    # APK upload - long timeouts for large file (60MB+)
+    location = /api/admin/apk-upload {
+        proxy_pass http://localhost:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 100m;
+        proxy_connect_timeout 300s;
+        proxy_send_timeout 300s;
+        proxy_read_timeout 300s;
     }
     
     # API routes
@@ -133,6 +150,9 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
+        client_max_body_size 100m;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
     }
     
     # Uploads (APK downloads)
@@ -195,6 +215,39 @@ but the server responded with a MIME type of "text/html"
 ### Issue 4: React Router Routes Return 404
 
 **Solution:** Already handled by SPA fallback in `server/src/app.js`
+
+### Issue 5: 502 Bad Gateway on APK Upload
+
+**Error:** `POST .../api/admin/apk-upload 502 (Bad Gateway)` when uploading APK (e.g. 61 MB).
+
+**Cause:** Nginx (or another reverse proxy) blocks or times out large uploads. Default `client_max_body_size` is 1 MB and proxy timeouts can be too short.
+
+**Fix (on the server where Nginx runs):**
+
+1. **Allow large body size** – inside the `server { }` block (before or inside `location` blocks), add:
+   ```nginx
+   client_max_body_size 100m;
+   ```
+
+2. **Longer timeouts for APK upload** – add a dedicated location before the general `/api/` block:
+   ```nginx
+   location = /api/admin/apk-upload {
+       proxy_pass http://localhost:8080;
+       proxy_http_version 1.1;
+       proxy_set_header Host $host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       client_max_body_size 100m;
+       proxy_connect_timeout 300s;
+       proxy_send_timeout 300s;
+       proxy_read_timeout 300s;
+   }
+   ```
+
+3. **Reload Nginx:** `sudo nginx -t && sudo systemctl reload nginx` (or `sudo service nginx reload`).
+
+The full Nginx example in the "Nginx Configuration" section above already includes these settings.
 
 ---
 
