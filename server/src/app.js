@@ -111,41 +111,41 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
   }
 }));
 
-// Serve static files from Vite dist folder with proper MIME types
-app.use(express.static(path.join(__dirname, "../dist"), {
-  setHeaders: (res, filepath) => {
-    // Set proper MIME types for JavaScript modules
-    if (filepath.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
-    } else if (filepath.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css; charset=UTF-8');
-    } else if (filepath.endsWith('.json')) {
-      res.setHeader('Content-Type', 'application/json; charset=UTF-8');
-    }
+const distPath = path.join(__dirname, "../dist");
+const assetHeaders = (res, filepath) => {
+  if (filepath.endsWith('.js')) {
+    res.setHeader('Content-Type', 'application/javascript; charset=UTF-8');
+  } else if (filepath.endsWith('.css')) {
+    res.setHeader('Content-Type', 'text/css; charset=UTF-8');
+  } else if (filepath.endsWith('.json')) {
+    res.setHeader('Content-Type', 'application/json; charset=UTF-8');
   }
-}));
+};
 
-// SPA fallback - serve index.html for non-API and non-static routes
+// Serve /assets explicitly first so CSS/JS always get correct MIME type (avoids proxy returning HTML)
+app.use("/assets", express.static(path.join(distPath, "assets"), { setHeaders: assetHeaders }));
+
+// Serve other static files from Vite dist (vite.svg, index.html for later fallback)
+app.use(express.static(distPath, { setHeaders: assetHeaders }));
+
+// SPA fallback - serve index.html only for HTML navigation, never for asset requests
 app.get("*", (req, res, next) => {
-  // Skip API routes
-  if (req.path.startsWith("/api/")) {
+  if (req.path.startsWith("/api/") || req.path.startsWith("/uploads/")) {
     return next();
   }
-  
-  // Skip static asset routes
-  if (req.path.startsWith("/assets/") || 
-      req.path.startsWith("/uploads/") ||
-      req.path.endsWith('.js') || 
-      req.path.endsWith('.css') ||
-      req.path.endsWith('.svg') ||
-      req.path.endsWith('.png') ||
-      req.path.endsWith('.jpg') ||
-      req.path.endsWith('.ico')) {
+  if (req.path.startsWith("/assets/") ||
+      req.path.endsWith(".js") || req.path.endsWith(".css") ||
+      req.path.endsWith(".svg") || req.path.endsWith(".png") ||
+      req.path.endsWith(".jpg") || req.path.endsWith(".ico") ||
+      req.path.endsWith(".woff2") || req.path.endsWith(".woff")) {
     return next();
   }
-  
-  // Send index.html for SPA routes
   res.sendFile(path.join(__dirname, "../dist/index.html"));
+});
+
+// 404 for any unhandled request (e.g. missing /assets file) - never return HTML for assets
+app.use((req, res) => {
+  res.status(404).setHeader("Content-Type", "text/plain").send("Not Found");
 });
 
 // Error handler

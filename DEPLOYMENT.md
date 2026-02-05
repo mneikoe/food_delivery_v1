@@ -170,7 +170,16 @@ but the server responded with a MIME type of "text/html"
 - Wildcard route excludes `/assets/*` and `.js` files
 - SPA fallback only for HTML routes
 
-### Issue 2: Assets Not Loading (404)
+### Issue 2: Assets Not Loading (404) or CSS/JS Return "text/html"
+
+**Error:** `Refused to apply style from '.../assets/index-xxx.css' because its MIME type ('text/html') is not a supported stylesheet MIME type`
+
+**Cause:** Either the `assets/` folder is missing on the server, or a reverse proxy (e.g. Nginx) is serving `index.html` for missing files instead of passing the request to Node.
+
+**Fix:**
+1. Deploy the **full** `web/dist/` output: copy **both** `index.html` **and** the `assets/` folder into `server/dist/` (e.g. `cp -r web/dist/* server/dist/`).
+2. Ensure `server/dist/assets/` exists and contains the built `.js` and `.css` files.
+3. If using Nginx, do **not** use `try_files $uri $uri/ /index.html;` for `/` when Node serves the app; proxy all requests to Node (see Nginx config above) so Express can serve `/assets/` with correct MIME types.
 
 **Check:**
 1. `server/dist/` folder has `assets/` directory
