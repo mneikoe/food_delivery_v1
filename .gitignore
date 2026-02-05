@@ -6,9 +6,12 @@ node_modules/
 # APK uploads
 server/uploads/
 server/apk-info.json
+server/order-window.json
 
 
 # Web build artifacts
+server/dist/
+web/dist/
 
 
 # Client folders

@@ -31,7 +31,7 @@ const limiter = rateLimit({
   // Use X-Forwarded-For header to get client IP (when behind proxy)
   skip: (req) => {
     // Skip rate limiting for health check and public endpoints
-    return req.path === '/health' || req.path === '/api/public/apk-info';
+    return req.path === '/health' || req.path === '/api/public/apk-info' || req.path === '/api/public/order-window';
   },
   // Custom handler for rate limit exceeded
   handler: (req, res) => {
@@ -64,6 +64,22 @@ app.get("/api/public/apk-info", async (req, res) => {
     } else {
       res.json({ available: false });
     }
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Public order window endpoint (no auth required)
+app.get("/api/public/order-window", (req, res) => {
+  try {
+    const orderWindow = require("./utils/orderWindow");
+    const settings = orderWindow.getOrderWindowSettings();
+    const status = orderWindow.isOrderWindowOpen();
+    res.json({
+      ...settings,
+      ordersOpen: status.open,
+      message: status.message || null,
+    });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

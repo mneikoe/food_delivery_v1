@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Card, Upload, Button, message, Typography, Space, Divider, Input } from 'antd';
-import { UploadOutlined, AndroidOutlined, DeleteOutlined } from '@ant-design/icons';
-import { uploadApkInfo, getApkInfo, deleteApkInfo } from '../api/adminApi';
+import { Card, Upload, Button, message, Typography, Space, Divider, Input, Switch } from 'antd';
+import { UploadOutlined, AndroidOutlined, DeleteOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { uploadApkInfo, getApkInfo, deleteApkInfo, getOrderWindow, updateOrderWindow } from '../api/adminApi';
 
 const { Title, Text, Paragraph } = Typography;
+
+const TIME_REGEX = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
 
 export default function AppSettings() {
   const [uploading, setUploading] = useState(false);
@@ -11,9 +13,68 @@ export default function AppSettings() {
   const [fileList, setFileList] = useState([]);
   const [version, setVersion] = useState('1.0.0');
 
+  const [orderWindowEnabled, setOrderWindowEnabled] = useState(true);
+  const [orderWindowStart, setOrderWindowStart] = useState('00:00');
+  const [orderWindowEnd, setOrderWindowEnd] = useState('23:59');
+  const [ordersOpen, setOrdersOpen] = useState(true);
+  const [orderWindowSaving, setOrderWindowSaving] = useState(false);
+
   useEffect(() => {
     fetchApkInfo();
+    fetchOrderWindow();
   }, []);
+
+  const fetchOrderWindow = async () => {
+    try {
+      const res = await getOrderWindow();
+      const d = res.data;
+      setOrderWindowEnabled(d.orderWindowEnabled !== false);
+      setOrderWindowStart(d.orderWindowStart || '00:00');
+      setOrderWindowEnd(d.orderWindowEnd || '23:59');
+      setOrdersOpen(d.ordersOpen);
+    } catch (e) {
+      console.error('Failed to fetch order window:', e);
+    }
+  };
+
+  const handleOrderWindowToggle = async (enabled) => {
+    setOrderWindowSaving(true);
+    try {
+      const res = await updateOrderWindow({
+        orderWindowEnabled: enabled,
+        orderWindowStart: orderWindowStart,
+        orderWindowEnd: orderWindowEnd,
+      });
+      setOrderWindowEnabled(res.data.orderWindowEnabled);
+      setOrdersOpen(res.data.ordersOpen);
+      message.success(enabled ? 'Orders are now accepted' : 'Orders are now closed');
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to update order window');
+    } finally {
+      setOrderWindowSaving(false);
+    }
+  };
+
+  const handleOrderWindowTimeSave = async () => {
+    if (!TIME_REGEX.test(orderWindowStart) || !TIME_REGEX.test(orderWindowEnd)) {
+      message.error('Use 24-hour format for times (e.g. 09:00, 22:00)');
+      return;
+    }
+    setOrderWindowSaving(true);
+    try {
+      const res = await updateOrderWindow({
+        orderWindowEnabled,
+        orderWindowStart,
+        orderWindowEnd,
+      });
+      setOrdersOpen(res.data.ordersOpen);
+      message.success('Order window times updated (IST)');
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to update');
+    } finally {
+      setOrderWindowSaving(false);
+    }
+  };
 
   const fetchApkInfo = async () => {
     try {
@@ -199,6 +260,64 @@ export default function AppSettings() {
             </Paragraph>
           </div>
         )}
+      </Card>
+
+      <Card
+        title={
+          <Space>
+            <ClockCircleOutlined style={{ fontSize: 24, color: '#1890ff' }} />
+            <Text strong>Order Window</Text>
+          </Space>
+        }
+        style={{ marginBottom: 24 }}
+      >
+        <Paragraph>
+          Turn order acceptance on or off. When off, users cannot place new orders. You can also set a time window (IST) so orders are only accepted during certain hours.
+        </Paragraph>
+        <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <Text>Accept orders:</Text>
+            <Switch
+              checked={orderWindowEnabled}
+              onChange={handleOrderWindowToggle}
+              loading={orderWindowSaving}
+              checkedChildren="ON"
+              unCheckedChildren="OFF"
+            />
+            <Text type="secondary">
+              {ordersOpen ? (
+                <Text style={{ color: '#52c41a' }}>Orders are currently open</Text>
+              ) : (
+                <Text style={{ color: '#ff4d4f' }}>Orders are currently closed</Text>
+              )}
+            </Text>
+          </div>
+          <Divider style={{ margin: '12px 0' }} />
+          <div>
+            <Text strong>Time window (IST, 24-hour format)</Text>
+            <Paragraph type="secondary" style={{ marginTop: 4, marginBottom: 8 }}>
+              Only accept orders between these times. Leave 00:00–23:59 for all day when orders are ON.
+            </Paragraph>
+            <Space wrap>
+              <Input
+                placeholder="Start e.g. 09:00"
+                value={orderWindowStart}
+                onChange={(e) => setOrderWindowStart(e.target.value)}
+                style={{ width: 120 }}
+              />
+              <span>to</span>
+              <Input
+                placeholder="End e.g. 22:00"
+                value={orderWindowEnd}
+                onChange={(e) => setOrderWindowEnd(e.target.value)}
+                style={{ width: 120 }}
+              />
+              <Button type="primary" onClick={handleOrderWindowTimeSave} loading={orderWindowSaving}>
+                Save times
+              </Button>
+            </Space>
+          </div>
+        </Space>
       </Card>
 
       <Card title="Download Link" style={{ marginBottom: 24 }}>

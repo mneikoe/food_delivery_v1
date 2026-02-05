@@ -502,3 +502,39 @@ exports.deleteApk = async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 };
+
+// Order window (accept orders on/off and optional time duration)
+exports.getOrderWindow = async (req, res) => {
+  try {
+    const orderWindow = require("../utils/orderWindow");
+    const settings = orderWindow.getOrderWindowSettings();
+    const status = orderWindow.isOrderWindowOpen();
+    res.json({
+      ...settings,
+      ordersOpen: status.open,
+      message: status.message || null,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateOrderWindow = async (req, res) => {
+  try {
+    const orderWindow = require("../utils/orderWindow");
+    const { orderWindowEnabled, orderWindowStart, orderWindowEnd } = req.body;
+    const updated = orderWindow.setOrderWindowSettings({
+      orderWindowEnabled,
+      orderWindowStart,
+      orderWindowEnd,
+    });
+    const status = orderWindow.isOrderWindowOpen();
+    res.json({
+      ...updated,
+      ordersOpen: status.open,
+      message: status.message || null,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};

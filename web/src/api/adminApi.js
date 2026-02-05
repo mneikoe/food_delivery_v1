@@ -116,4 +116,8 @@ export const uploadApkInfo = (formData) => api.post('/admin/apk-upload', formDat
 export const getApkInfo = () => api.get('/admin/apk-info');
 export const deleteApkInfo = () => api.delete('/admin/apk');
 
+// Order window (accept orders on/off and time duration)
+export const getOrderWindow = () => api.get('/admin/order-window');
+export const updateOrderWindow = (data) => api.put('/admin/order-window', data);
+
 export default api;

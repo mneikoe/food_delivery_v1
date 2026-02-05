@@ -482,6 +482,7 @@ export default function LandingPage() {
                   <li><a onClick={() => scrollToSection('about')}>About</a></li>
                   <li><a onClick={() => scrollToSection('features')}>Why Us</a></li>
                   <li><a onClick={() => scrollToSection('download')}>Download</a></li>
+                  <li><a href="/privacypolicy">Privacy Policy</a></li>
                 </ul>
               </div>
             </Col>

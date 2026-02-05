@@ -13,6 +13,7 @@ import Offers from './pages/Offers';
 import Orders from './pages/Orders';
 import DeliveryPartners from './pages/DeliveryPartners';
 import AppSettings from './pages/AppSettings';
+import PrivacyPolicy from './pages/PrivacyPolicy';
 import './App.css';
 
 const { Content } = Layout;
@@ -26,6 +27,7 @@ function App() {
       theme={{
         token: {
           colorPrimary: '#10B981',
+          fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         },
       }}
     >
@@ -33,6 +35,7 @@ function App() {
         <Routes>
           {/* Public Landing Page */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/privacypolicy" element={<PrivacyPolicy />} />
           
           {/* Admin Login */}
           <Route path="/admin/login" element={!token ? <Login /> : <Navigate to="/admin" replace />} />

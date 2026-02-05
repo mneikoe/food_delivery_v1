@@ -226,6 +226,12 @@ exports.updateCartItem = async (req, res) => {
 // Orders
 exports.createOrder = async (req, res) => {
   try {
+    const orderWindow = require("../utils/orderWindow");
+    const windowStatus = orderWindow.isOrderWindowOpen();
+    if (!windowStatus.open) {
+      return res.status(503).json({ error: windowStatus.message });
+    }
+
     const { addressId, paymentMethod = "COD", couponCode } = req.body;
     const userId = req.user._id;
 

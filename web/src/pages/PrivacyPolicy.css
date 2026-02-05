@@ -1,0 +1,80 @@
+.privacy-policy-page {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #f8faf9 0%, #e8f5e9 100%);
+  padding: 24px 16px 48px;
+}
+
+.privacy-policy-container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.privacy-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #2D6A4F;
+  font-size: 15px;
+  margin-bottom: 24px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.2s;
+}
+
+.privacy-back-link:hover {
+  opacity: 0.85;
+  color: #2D6A4F;
+}
+
+.privacy-main-title {
+  font-family: 'Plus Jakarta Sans', 'DM Sans', -apple-system, sans-serif !important;
+  color: #1B4332 !important;
+  margin-bottom: 8px !important;
+}
+
+.privacy-last-updated {
+  display: block;
+  margin-bottom: 32px;
+  font-size: 14px;
+}
+
+.privacy-card {
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.privacy-card .ant-card-body {
+  padding: 32px 40px;
+}
+
+@media (max-width: 768px) {
+  .privacy-card .ant-card-body {
+    padding: 24px 20px;
+  }
+}
+
+.privacy-intro {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #333;
+}
+
+.privacy-card h3.ant-typography {
+  margin-top: 28px;
+  margin-bottom: 12px;
+  color: #1B4332;
+}
+
+.privacy-card .ant-typography + ul {
+  margin-top: 8px;
+  padding-left: 24px;
+}
+
+.privacy-card ul li {
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+
+.privacy-card .ant-divider {
+  margin: 24px 0;
+}
