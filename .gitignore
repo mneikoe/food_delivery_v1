@@ -10,8 +10,7 @@ server/order-window.json
 
 
 # Web build artifacts
-server/dist/
-web/dist/
+
 
 
 # Client folders
