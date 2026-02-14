@@ -5,6 +5,10 @@ const cors = require("cors");
 const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 
+const auth = require("./middleware/auth");
+const roleCheck = require("./middleware/role");
+const upload = require("./middleware/upload");
+const adminController = require("./controllers/adminController");
 const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
@@ -13,13 +17,27 @@ const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 
-// Trust proxy - Required when behind Nginx/reverse proxy
-// This allows Express to trust X-Forwarded-* headers
+// Trust proxy - when behind any reverse proxy (Nginx, platform proxy, etc.)
 app.set('trust proxy', 1);
 
 // Security middleware
 //app.use(helmet());
 app.use(cors());
+
+// APK upload BEFORE express.json() so large multipart body is never parsed as JSON (fixes 502)
+app.post(
+  "/api/admin/apk-upload",
+  auth,
+  roleCheck("ADMIN"),
+  (req, res, next) => {
+    req.setTimeout(300000);
+    res.setTimeout(300000);
+    next();
+  },
+  upload.single("apk"),
+  adminController.uploadApk
+);
+
 app.use(express.json());
 
 // Rate limiting - Configured for proxy environment
@@ -31,7 +49,7 @@ const limiter = rateLimit({
   // Use X-Forwarded-For header to get client IP (when behind proxy)
   skip: (req) => {
     // Skip rate limiting for health check, public endpoints, and large APK upload
-    return req.path === '/health' || req.path === '/api/public/apk-info' || req.path === '/api/public/order-window' || req.path === '/api/admin/apk-upload';
+    return req.path === '/health' || req.path === '/api/public/apk-info' || req.path === '/api/public/order-window' || req.path === '/api/public/hero-slides' || req.path === '/api/admin/apk-upload';
   },
   // Custom handler for rate limit exceeded
   handler: (req, res) => {
@@ -80,6 +98,16 @@ app.get("/api/public/order-window", (req, res) => {
       ordersOpen: status.open,
       message: status.message || null,
     });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Public hero slides for app home screen (no auth required)
+app.get("/api/public/hero-slides", (req, res) => {
+  try {
+    const heroSlides = require("./utils/heroSlides");
+    res.json(heroSlides.getHeroSlides());
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

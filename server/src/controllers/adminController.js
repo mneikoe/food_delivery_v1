@@ -538,3 +538,37 @@ exports.updateOrderWindow = async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 };
+
+// Hero slides (home screen carousel – 4 slides: image, headline, text)
+exports.getHeroSlides = async (req, res) => {
+  try {
+    const heroSlides = require("../utils/heroSlides");
+    res.json(heroSlides.getHeroSlides());
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateHeroSlides = async (req, res) => {
+  try {
+    const heroSlides = require("../utils/heroSlides");
+    const updated = heroSlides.setHeroSlides(req.body);
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Upload hero slide image; save to server uploads/hero/ and return URL
+exports.uploadHeroImage = async (req, res) => {
+  try {
+    if (!req.file || !req.file.filename) {
+      return res.status(400).json({ error: "No image file uploaded" });
+    }
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+    const url = `${baseUrl.replace(/\/$/, "")}/uploads/hero/${req.file.filename}`;
+    res.json({ url, filename: req.file.filename });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Card, Upload, Button, message, Typography, Space, Divider, Input, Switch } from 'antd';
-import { UploadOutlined, AndroidOutlined, DeleteOutlined, ClockCircleOutlined } from '@ant-design/icons';
-import { uploadApkInfo, getApkInfo, deleteApkInfo, getOrderWindow, updateOrderWindow } from '../api/adminApi';
+import { Card, Upload, Button, message, Typography, Space, Divider, Input, Switch, Row, Col } from 'antd';
+import { UploadOutlined, AndroidOutlined, DeleteOutlined, ClockCircleOutlined, PictureOutlined, SaveOutlined } from '@ant-design/icons';
+import { uploadApkInfo, getApkInfo, deleteApkInfo, getOrderWindow, updateOrderWindow, getHeroSlides, updateHeroSlides, uploadHeroImage } from '../api/adminApi';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -19,10 +19,77 @@ export default function AppSettings() {
   const [ordersOpen, setOrdersOpen] = useState(true);
   const [orderWindowSaving, setOrderWindowSaving] = useState(false);
 
+  const [heroSlides, setHeroSlides] = useState([
+    { image: '', headline: '', text: '' },
+    { image: '', headline: '', text: '' },
+    { image: '', headline: '', text: '' },
+    { image: '', headline: '', text: '' },
+  ]);
+  const [heroSlidesSaving, setHeroSlidesSaving] = useState(false);
+  const [heroUploadingIndex, setHeroUploadingIndex] = useState(null);
+
   useEffect(() => {
     fetchApkInfo();
     fetchOrderWindow();
+    fetchHeroSlides();
   }, []);
+
+  const fetchHeroSlides = async () => {
+    try {
+      const res = await getHeroSlides();
+      if (res.data && Array.isArray(res.data.slides)) {
+        const slides = res.data.slides.slice(0, 4);
+        setHeroSlides([
+          slides[0] || { image: '', headline: '', text: '' },
+          slides[1] || { image: '', headline: '', text: '' },
+          slides[2] || { image: '', headline: '', text: '' },
+          slides[3] || { image: '', headline: '', text: '' },
+        ]);
+      }
+    } catch (e) {
+      console.error('Failed to fetch hero slides:', e);
+    }
+  };
+
+  const handleHeroSlideChange = (index, field, value) => {
+    const next = [...heroSlides];
+    next[index] = { ...next[index], [field]: value };
+    setHeroSlides(next);
+  };
+
+  const handleHeroSlidesSave = async () => {
+    setHeroSlidesSaving(true);
+    try {
+      await updateHeroSlides({ slides: heroSlides });
+      message.success('Hero slides saved. App home will show these 4 slides.');
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to save hero slides');
+    } finally {
+      setHeroSlidesSaving(false);
+    }
+  };
+
+  const handleHeroImageUpload = async (index, file, onSuccess, onError) => {
+    setHeroUploadingIndex(index);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const res = await uploadHeroImage(formData, index);
+      const url = res.data?.url;
+      if (url) {
+        handleHeroSlideChange(index, 'image', url);
+        message.success(`Slide ${index + 1} image saved on server.`);
+        onSuccess();
+      } else {
+        throw new Error('No URL returned');
+      }
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Upload failed');
+      onError(e);
+    } finally {
+      setHeroUploadingIndex(null);
+    }
+  };
 
   const fetchOrderWindow = async () => {
     try {
@@ -146,18 +213,23 @@ export default function AppSettings() {
   };
 
   return (
-    <div>
-      <Title level={2}>App Settings</Title>
-      <Paragraph>Manage your mobile application APK file</Paragraph>
+    <div style={{ maxWidth: 960, margin: '0 auto' }}>
+      <div style={{ marginBottom: 24 }}>
+        <Title level={2} style={{ marginBottom: 4 }}>App Settings</Title>
+        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Manage APK, order window, and home screen hero slides in one place.
+        </Paragraph>
+      </div>
 
-      <Card 
+      <Card
         title={
           <Space>
-            <AndroidOutlined style={{ fontSize: 24, color: '#3DDC84' }} />
-            <Text strong>Android APK Management For Admin</Text>
+            <AndroidOutlined style={{ fontSize: 22, color: '#3DDC84' }} />
+            <span>Android APK</span>
           </Space>
         }
         style={{ marginBottom: 24 }}
+        styles={{ body: { paddingTop: 8 } }}
       >
         {apkInfo ? (
           <div>
@@ -265,18 +337,34 @@ export default function AppSettings() {
       <Card
         title={
           <Space>
-            <ClockCircleOutlined style={{ fontSize: 24, color: '#1890ff' }} />
-            <Text strong>Order Window</Text>
+            <ClockCircleOutlined style={{ fontSize: 22, color: '#1890ff' }} />
+            <span>Order Window</span>
+            {ordersOpen != null && (
+              <span
+                style={{
+                  marginLeft: 8,
+                  padding: '2px 8px',
+                  borderRadius: 6,
+                  fontSize: 12,
+                  background: ordersOpen ? '#f6ffed' : '#fff2f0',
+                  color: ordersOpen ? '#52c41a' : '#ff4d4f',
+                  border: `1px solid ${ordersOpen ? '#b7eb8f' : '#ffccc7'}`,
+                }}
+              >
+                {ordersOpen ? 'Open' : 'Closed'}
+              </span>
+            )}
           </Space>
         }
         style={{ marginBottom: 24 }}
+        styles={{ body: { paddingTop: 8 } }}
       >
-        <Paragraph>
-          Turn order acceptance on or off. When off, users cannot place new orders. You can also set a time window (IST) so orders are only accepted during certain hours.
+        <Paragraph type="secondary" style={{ marginBottom: 16 }}>
+          Turn orders on/off and set the time window (IST). When off, users cannot place orders.
         </Paragraph>
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <Text>Accept orders:</Text>
+            <Text>Accept orders</Text>
             <Switch
               checked={orderWindowEnabled}
               onChange={handleOrderWindowToggle}
@@ -292,25 +380,25 @@ export default function AppSettings() {
               )}
             </Text>
           </div>
-          <Divider style={{ margin: '12px 0' }} />
+          <Divider style={{ margin: '8px 0' }} />
           <div>
-            <Text strong>Time window (IST, 24-hour format)</Text>
-            <Paragraph type="secondary" style={{ marginTop: 4, marginBottom: 8 }}>
-              Only accept orders between these times. Leave 00:00–23:59 for all day when orders are ON.
+            <Text strong style={{ display: 'block', marginBottom: 4 }}>Time window (IST, 24h)</Text>
+            <Paragraph type="secondary" style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
+              Only accept orders between these times. Use 00:00–23:59 for all day.
             </Paragraph>
-            <Space wrap>
+            <Space wrap align="center">
               <Input
                 placeholder="Start e.g. 09:00"
                 value={orderWindowStart}
                 onChange={(e) => setOrderWindowStart(e.target.value)}
-                style={{ width: 120 }}
+                style={{ width: 110 }}
               />
-              <span>to</span>
+              <span style={{ color: '#999' }}>to</span>
               <Input
                 placeholder="End e.g. 22:00"
                 value={orderWindowEnd}
                 onChange={(e) => setOrderWindowEnd(e.target.value)}
-                style={{ width: 120 }}
+                style={{ width: 110 }}
               />
               <Button type="primary" onClick={handleOrderWindowTimeSave} loading={orderWindowSaving}>
                 Save times
@@ -318,6 +406,114 @@ export default function AppSettings() {
             </Space>
           </div>
         </Space>
+      </Card>
+
+      <Card
+        title={
+          <Space>
+            <PictureOutlined style={{ fontSize: 22, color: '#722ed1' }} />
+            <span>Home Hero Slides</span>
+          </Space>
+        }
+        style={{ marginBottom: 24 }}
+        styles={{ body: { paddingTop: 8 } }}
+      >
+        <Paragraph type="secondary" style={{ marginBottom: 16 }}>
+          Upload images (saved on server) or paste image URL. Then add headline and text. Click &quot;Save Hero Slides&quot; to persist. Data is saved in server folder and stays after refresh.
+        </Paragraph>
+        <Row gutter={[16, 16]}>
+          {[0, 1, 2, 3].map((i) => (
+            <Col xs={24} md={12} key={i}>
+              <div
+                style={{
+                  border: '1px solid #e8e8e8',
+                  borderRadius: 12,
+                  padding: 16,
+                  background: '#fafafa',
+                  height: '100%',
+                }}
+              >
+                <Text strong style={{ fontSize: 14, marginBottom: 8, display: 'block' }}>Slide {i + 1}</Text>
+                {heroSlides[i]?.image && (
+                  <div
+                    style={{
+                      marginBottom: 12,
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      height: 100,
+                      background: '#eee',
+                    }}
+                  >
+                    <img
+                      src={heroSlides[i].image}
+                      alt={`Slide ${i + 1}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => { e.target.style.display = 'none'; }}
+                    />
+                  </div>
+                )}
+                <div style={{ marginBottom: 10 }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Image (upload or URL)</Text>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <Upload
+                      accept="image/*"
+                      showUploadList={false}
+                      customRequest={({ file, onSuccess, onError }) => {
+                        handleHeroImageUpload(i, file, onSuccess, onError);
+                      }}
+                    >
+                      <Button
+                        size="small"
+                        icon={<PictureOutlined />}
+                        loading={heroUploadingIndex === i}
+                      >
+                        Upload image
+                      </Button>
+                    </Upload>
+                    <Input
+                      placeholder="Or paste image URL"
+                      value={heroSlides[i]?.image || ''}
+                      onChange={(e) => handleHeroSlideChange(i, 'image', e.target.value)}
+                      style={{ flex: 1, minWidth: 140 }}
+                      size="small"
+                    />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Headline</Text>
+                  <Input
+                    placeholder="e.g. Quick Delivery"
+                    value={heroSlides[i]?.headline || ''}
+                    onChange={(e) => handleHeroSlideChange(i, 'headline', e.target.value)}
+                    style={{ marginTop: 4 }}
+                    size="small"
+                  />
+                </div>
+                <div>
+                  <Text type="secondary" style={{ fontSize: 12 }}>Short text</Text>
+                  <Input
+                    placeholder="e.g. Hot food at your door, fast"
+                    value={heroSlides[i]?.text || ''}
+                    onChange={(e) => handleHeroSlideChange(i, 'text', e.target.value)}
+                    style={{ marginTop: 4 }}
+                    size="small"
+                  />
+                </div>
+              </div>
+            </Col>
+          ))}
+        </Row>
+        <div style={{ marginTop: 16 }}>
+          <Button
+            type="primary"
+            icon={<SaveOutlined />}
+            onClick={handleHeroSlidesSave}
+            loading={heroSlidesSaving}
+            size="middle"
+          >
+            Save Hero Slides
+          </Button>
+        </div>
       </Card>
 
       <Card title="Download Link" style={{ marginBottom: 24 }}>

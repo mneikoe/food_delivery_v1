@@ -8,7 +8,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://www.chatoraadda.in',
+       target: 'https://www.chatoraadda.in',
        // target: 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (path) => path,

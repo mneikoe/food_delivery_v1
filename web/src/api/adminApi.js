@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8080/api';
+// In dev, use relative /api so Vite proxy forwards to localhost (no .env needed). In production use full URL.
+const API_BASE_URL = import.meta.env.DEV
+  ? '/api'
+  : (import.meta.env.VITE_API_URL || 'https://www.chatoraadda.in/api');
 
 // Create axios instance with auth interceptor
 const api = axios.create({
@@ -119,5 +122,13 @@ export const deleteApkInfo = () => api.delete('/admin/apk');
 // Order window (accept orders on/off and time duration)
 export const getOrderWindow = () => api.get('/admin/order-window');
 export const updateOrderWindow = (data) => api.put('/admin/order-window', data);
+
+// Hero slides (home screen – 4 slides: image URL, headline, text)
+export const getHeroSlides = () => api.get('/admin/hero-slides');
+export const updateHeroSlides = (data) => api.put('/admin/hero-slides', data);
+export const uploadHeroImage = (formData, slideIndex) =>
+  api.post(`/admin/hero-slides/upload?slideIndex=${slideIndex}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
 
 export default api;
