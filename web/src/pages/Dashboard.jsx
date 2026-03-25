@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Spin, message } from 'antd';
+import { Card, Statistic, Spin, message, Typography } from 'antd';
 import {
   AppstoreOutlined,
   ShoppingOutlined,
@@ -52,67 +52,72 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div style={{ textAlign: 'center', padding: 50 }}>
+      <div className="admin-page" style={{ textAlign: 'center', padding: '3rem' }}>
         <Spin size="large" />
       </div>
     );
   }
 
+  const metricCards = [
+    {
+      key: 'cat',
+      title: 'Total Categories',
+      value: stats.categories,
+      prefix: <AppstoreOutlined />,
+      valueStyle: { color: 'var(--ant-color-success, #3f8600)' },
+    },
+    {
+      key: 'prod',
+      title: 'Total Products',
+      value: stats.products,
+      prefix: <ShoppingOutlined />,
+      valueStyle: { color: 'var(--ant-color-info, #1890ff)' },
+    },
+    {
+      key: 'coup',
+      title: 'Total Coupons',
+      value: stats.coupons,
+      prefix: <GiftOutlined />,
+      valueStyle: { color: 'var(--ant-color-purple-6, #722ed1)' },
+    },
+    {
+      key: 'ord',
+      title: 'Total Orders',
+      value: stats.orders,
+      prefix: <FileTextOutlined />,
+      valueStyle: { color: 'var(--ant-color-warning, #fa8c16)' },
+    },
+    {
+      key: 'pend',
+      title: 'Pending Orders',
+      value: stats.pendingOrders,
+      prefix: <ClockCircleOutlined />,
+      valueStyle: { color: 'var(--ant-color-error, #cf1322)' },
+    },
+  ];
+
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ marginBottom: 24 }}>Dashboard</h1>
-      <Row gutter={[16, 16]}>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Total Categories"
-              value={stats.categories}
-              prefix={<AppstoreOutlined />}
-              valueStyle={{ color: '#3f8600' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Total Products"
-              value={stats.products}
-              prefix={<ShoppingOutlined />}
-              valueStyle={{ color: '#1890ff' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Total Coupons"
-              value={stats.coupons}
-              prefix={<GiftOutlined />}
-              valueStyle={{ color: '#722ed1' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Total Orders"
-              value={stats.orders}
-              prefix={<FileTextOutlined />}
-              valueStyle={{ color: '#fa8c16' }}
-            />
-          </Card>
-        </Col>
-        <Col xs={24} sm={12} lg={6}>
-          <Card>
-            <Statistic
-              title="Pending Orders"
-              value={stats.pendingOrders}
-              prefix={<ClockCircleOutlined />}
-              valueStyle={{ color: '#cf1322' }}
-            />
-          </Card>
-        </Col>
-      </Row>
+    <div className="admin-page">
+      <Typography.Text type="secondary" className="admin-section-label" style={{ display: 'block', marginBottom: 12 }}>
+        Overview
+      </Typography.Text>
+      <p style={{ margin: '0 0 1.5rem', color: 'var(--ant-color-text-secondary)' }}>
+        Key counts across your catalog and orders.
+      </p>
+      <div className="admin-metrics-row">
+        {metricCards.map((m) => (
+          <div key={m.key} className="admin-metric-item">
+            <Card className="admin-metric-card">
+              <Statistic
+                title={m.title}
+                value={m.value}
+                prefix={m.prefix}
+                valueStyle={m.valueStyle}
+              />
+            </Card>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

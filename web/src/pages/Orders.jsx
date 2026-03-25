@@ -1,9 +1,41 @@
-import { useEffect, useState, useRef } from 'react';
-import { Table, Button, Space, Modal, Form, Select, Tag, message, Descriptions } from 'antd';
-import { EyeOutlined } from '@ant-design/icons';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  Table,
+  Button,
+  Space,
+  Modal,
+  Form,
+  Select,
+  Tag,
+  message,
+  Descriptions,
+  Typography,
+  Card,
+  Row,
+  Col,
+  Statistic,
+  Segmented,
+  DatePicker,
+  Divider,
+  Drawer,
+  Badge,
+  Grid,
+} from 'antd';
+import {
+  EyeOutlined,
+  DownloadOutlined,
+  LineChartOutlined,
+  DollarOutlined,
+  ShoppingOutlined,
+  FilterOutlined,
+  BarChartOutlined,
+  WhatsAppOutlined,
+} from '@ant-design/icons';
 import { getOrders, getOrderDetails, updateOrderStatus, assignDeliveryPartner, getAvailableDeliveryPartners } from '../api/adminApi';
 import { supabase } from '../services/supabase';
 import dayjs from 'dayjs';
+import OrderReportsCharts from '../components/OrderReportsCharts';
+import { exportOrdersToExcel } from '../utils/exportOrdersExcel';
 
 const ORDER_STATUSES = [
   'CREATED',
@@ -15,6 +47,14 @@ const ORDER_STATUSES = [
   'OTP_VERIFIED',
   'DELIVERED',
   'CANCELLED',
+];
+
+const PRESETS = [
+  { label: 'All', value: 'all' },
+  { label: 'Today', value: 'today' },
+  { label: 'Week', value: 'week' },
+  { label: 'Month', value: 'month' },
+  { label: 'Custom', value: 'custom' },
 ];
 
 const getStatusColor = (status) => {
@@ -32,7 +72,65 @@ const getStatusColor = (status) => {
   return colors[status] || 'default';
 };
 
+const normalizePhoneNumber = (phone = '') => String(phone).replace(/[^\d]/g, '');
+
+function getFilterSummaryText(datePreset, customRange, statusFilter) {
+  const presetLabels = {
+    all: 'All time',
+    today: 'Today',
+    week: 'This week',
+    month: 'This month',
+    custom: 'Custom range',
+  };
+  let datePart = presetLabels[datePreset] || datePreset;
+  if (datePreset === 'custom' && customRange?.[0] && customRange?.[1]) {
+    datePart = `${customRange[0].format('MMM D')} – ${customRange[1].format('MMM D, YYYY')}`;
+  }
+  const statusPart = statusFilter ? `Status: ${statusFilter}` : 'Any status';
+  return `${datePart} · ${statusPart}`;
+}
+
+function countActiveFilterDeviations(datePreset, statusFilter) {
+  let n = 0;
+  if (datePreset !== 'all') n += 1;
+  if (statusFilter) n += 1;
+  return n;
+}
+
+function buildQueryParams(preset, customRange, statusFilter) {
+  const params = {};
+  if (statusFilter) {
+    params.status = statusFilter;
+  }
+  if (preset === 'all') {
+    return params;
+  }
+  if (preset === 'today') {
+    params.startDate = dayjs().startOf('day').toISOString();
+    params.endDate = dayjs().endOf('day').toISOString();
+    return params;
+  }
+  if (preset === 'week') {
+    params.startDate = dayjs().startOf('week').toISOString();
+    params.endDate = dayjs().endOf('week').toISOString();
+    return params;
+  }
+  if (preset === 'month') {
+    params.startDate = dayjs().startOf('month').toISOString();
+    params.endDate = dayjs().endOf('month').toISOString();
+    return params;
+  }
+  if (preset === 'custom' && customRange?.[0] && customRange?.[1]) {
+    params.startDate = customRange[0].startOf('day').toISOString();
+    params.endDate = customRange[1].endOf('day').toISOString();
+    return params;
+  }
+  return params;
+}
+
 export default function Orders() {
+  const screens = Grid.useBreakpoint();
+  const isMobile = !screens.md;
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [detailModalVisible, setDetailModalVisible] = useState(false);
@@ -43,17 +141,47 @@ export default function Orders() {
   const [form] = Form.useForm();
   const [assignForm] = Form.useForm();
 
+  const [datePreset, setDatePreset] = useState('all');
+  const [customRange, setCustomRange] = useState(() => [dayjs().subtract(7, 'day'), dayjs()]);
+  const [statusFilter, setStatusFilter] = useState(undefined);
+  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
+  const [chartsVisible, setChartsVisible] = useState(false);
+
+  const fetchOrders = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = buildQueryParams(datePreset, customRange, statusFilter);
+      const response = await getOrders(params);
+      setOrders(response.data);
+    } catch (error) {
+      message.error('Failed to load orders');
+    } finally {
+      setLoading(false);
+    }
+  }, [datePreset, customRange, statusFilter]);
+
+  const fetchOrdersRef = useRef(fetchOrders);
+  fetchOrdersRef.current = fetchOrders;
+
   useEffect(() => {
     fetchOrders();
-    fetchDeliveryPartners();
+  }, [fetchOrders]);
 
-    // Subscribe to Supabase realtime for order updates
+  useEffect(() => {
+    const loadPartners = async () => {
+      try {
+        const response = await getAvailableDeliveryPartners();
+        setDeliveryPartners(response.data);
+      } catch (error) {
+        console.error('Failed to load delivery partners');
+      }
+    };
+    loadPartners();
+
     const channel = supabase.channel('admin_orders');
 
-    channel.on('broadcast', { event: 'order_update' }, (payload) => {
-      console.log('Order update received:', payload);
-      // Refetch orders when any order is updated
-      fetchOrders();
+    channel.on('broadcast', { event: 'order_update' }, () => {
+      fetchOrdersRef.current();
     });
 
     channel.subscribe((status) => {
@@ -64,32 +192,16 @@ export default function Orders() {
       }
     });
 
-    // Cleanup subscription on unmount
     return () => {
       channel.unsubscribe();
     };
   }, []);
 
-  const fetchOrders = async () => {
-    setLoading(true);
-    try {
-      const response = await getOrders();
-      setOrders(response.data);
-    } catch (error) {
-      message.error('Failed to load orders');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchDeliveryPartners = async () => {
-    try {
-      const response = await getAvailableDeliveryPartners();
-      setDeliveryPartners(response.data);
-    } catch (error) {
-      console.error('Failed to load delivery partners');
-    }
-  };
+  const nonCancelledOrders = orders.filter((o) => o.status !== 'CANCELLED');
+  const revenueExCancelled = nonCancelledOrders.reduce((s, o) => s + (Number(o.totalAmount) || 0), 0);
+  const cancelledCount = orders.filter((o) => o.status === 'CANCELLED').length;
+  const avgOrderValue =
+    nonCancelledOrders.length > 0 ? Math.round((revenueExCancelled / nonCancelledOrders.length) * 100) / 100 : 0;
 
   const handleViewDetails = async (orderId) => {
     try {
@@ -130,9 +242,35 @@ export default function Orders() {
       message.success('Delivery partner assigned successfully');
       setAssignModalVisible(false);
       fetchOrders();
-      fetchDeliveryPartners();
+      const response = await getAvailableDeliveryPartners();
+      setDeliveryPartners(response.data);
     } catch (error) {
       message.error(error.response?.data?.error || 'Failed to assign delivery partner');
+    }
+  };
+
+  const filterSummary = getFilterSummaryText(datePreset, customRange, statusFilter);
+  const filterBadgeCount = countActiveFilterDeviations(datePreset, statusFilter);
+
+  const resetFilters = () => {
+    setDatePreset('all');
+    setStatusFilter(undefined);
+    setCustomRange([dayjs().subtract(7, 'day'), dayjs()]);
+    message.info('Filters reset');
+  };
+
+  const handleExportExcel = () => {
+    if (!orders.length) {
+      message.warning('No orders to export for the current filters');
+      return;
+    }
+    try {
+      const tag = `${datePreset}_${dayjs().format('HHmmss')}`;
+      exportOrdersToExcel(orders, tag);
+      message.success('Excel file downloaded');
+    } catch (e) {
+      message.error('Export failed');
+      console.error(e);
     }
   };
 
@@ -141,42 +279,58 @@ export default function Orders() {
       title: 'Order ID',
       dataIndex: 'orderId',
       key: 'orderId',
+      width: 120,
+      fixed: isMobile ? false : 'left',
     },
     {
       title: 'Customer',
       key: 'customer',
+      ellipsis: true,
+      responsive: ['sm'],
       render: (_, record) => record.userId?.name || 'N/A',
     },
     {
-      title: 'Total Amount',
+      title: 'Total',
       dataIndex: 'totalAmount',
       key: 'totalAmount',
+      width: 110,
       render: (amount) => `₹${amount}`,
     },
     {
       title: 'Status',
       dataIndex: 'status',
       key: 'status',
+      width: 150,
       render: (status) => <Tag color={getStatusColor(status)}>{status}</Tag>,
     },
     {
       title: 'Delivery Partner',
       key: 'deliveryPartner',
-      render: (_, record) => record.deliveryPartnerId?.name || 'Not assigned',
+      ellipsis: true,
+      responsive: ['lg'],
+      render: (_, record) =>
+        record.deliveryPartnerId?.name
+          ? `${record.deliveryPartnerId.name}${record.deliveryPartnerId?.phone ? ` (${record.deliveryPartnerId.phone})` : ''}`
+          : '—',
     },
     {
-      title: 'Created At',
+      title: 'Created',
       dataIndex: 'createdAt',
       key: 'createdAt',
+      width: 150,
+      responsive: ['md'],
       render: (date) => dayjs(date).format('YYYY-MM-DD HH:mm'),
     },
     {
       title: 'Actions',
       key: 'actions',
+      width: isMobile ? 160 : 220,
+      fixed: isMobile ? false : 'right',
       render: (_, record) => (
-        <Space>
+        <Space size="small" wrap className="orders-actions-cell">
           <Button
             type="link"
+            size="small"
             icon={<EyeOutlined />}
             onClick={() => handleViewDetails(record._id)}
           >
@@ -184,17 +338,32 @@ export default function Orders() {
           </Button>
           <Button
             type="link"
+            size="small"
             onClick={() => handleUpdateStatus(record)}
             disabled={record.status === 'DELIVERED' || record.status === 'CANCELLED'}
           >
-            Update Status
+            Status
           </Button>
           {!record.deliveryPartnerId && record.status === 'ACCEPTED_BY_ADMIN' && (
+            <Button type="link" size="small" onClick={() => handleAssignDelivery(record)}>
+              Assign
+            </Button>
+          )}
+          {record.userId?.phone && (
             <Button
               type="link"
-              onClick={() => handleAssignDelivery(record)}
+              size="small"
+              icon={<WhatsAppOutlined />}
+              onClick={() => {
+                const phone = normalizePhoneNumber(record.userId?.phone);
+                if (!phone) return;
+                const text = encodeURIComponent(
+                  `Hi ${record.userId?.name || 'Customer'}, your order ${record.orderId} is currently ${record.status}.`
+                );
+                window.open(`https://wa.me/${phone}?text=${text}`, '_blank', 'noopener,noreferrer');
+              }}
             >
-              Assign Delivery
+              WhatsApp
             </Button>
           )}
         </Space>
@@ -203,17 +372,206 @@ export default function Orders() {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <h1 style={{ marginBottom: 24 }}>Orders</h1>
-      <Table
-        columns={columns}
-        dataSource={orders}
-        loading={loading}
-        rowKey="_id"
-        pagination={{ pageSize: 10 }}
-      />
+    <div className="admin-page orders-page">
+      <div className="orders-page-header">
+        <div>
+          <Typography.Text type="secondary" className="admin-section-label" style={{ display: 'block', marginBottom: 4 }}>
+            Orders
+          </Typography.Text>
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 0, maxWidth: 520, fontSize: 13 }}>
+            Review, filter, and export. Open filters or charts only when you need them.
+          </Typography.Paragraph>
+        </div>
+      </div>
 
-      {/* Order Details Modal */}
+      <Card className="orders-toolbar-card" size="small" bordered={false}>
+        <div className="orders-toolbar">
+          <div className="orders-toolbar-summary">
+            <Typography.Text type="secondary" className="orders-summary-label">
+              Active view
+            </Typography.Text>
+            <div className="orders-summary-value" title={filterSummary}>
+              {filterSummary}
+            </div>
+          </div>
+          <Space size={10} wrap className="orders-toolbar-actions">
+            {filterBadgeCount > 0 ? (
+              <Badge count={filterBadgeCount} size="small" offset={[-2, 2]}>
+                <span>
+                  <Button icon={<FilterOutlined />} onClick={() => setFiltersDrawerOpen(true)} type="default">
+                    Filters
+                  </Button>
+                </span>
+              </Badge>
+            ) : (
+              <Button icon={<FilterOutlined />} onClick={() => setFiltersDrawerOpen(true)} type="default">
+                Filters
+              </Button>
+            )}
+            <Button
+              type={chartsVisible ? 'primary' : 'default'}
+              icon={<BarChartOutlined />}
+              onClick={() => setChartsVisible((v) => !v)}
+            >
+              {chartsVisible ? 'Hide charts' : 'Show charts'}
+            </Button>
+            <Button icon={<DownloadOutlined />} onClick={handleExportExcel}>
+              Export Excel
+            </Button>
+          </Space>
+        </div>
+      </Card>
+
+      <Row gutter={[16, 16]} className="orders-kpi-row">
+        <Col xs={24} sm={8}>
+          <Card size="small" bordered className="admin-kpi-card orders-kpi-tile">
+            <Statistic
+              title="Orders (filtered)"
+              value={orders.length}
+              prefix={<ShoppingOutlined />}
+              valueStyle={{ color: 'var(--ant-color-primary)', fontWeight: 600 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card size="small" bordered className="admin-kpi-card orders-kpi-tile">
+            <Statistic
+              title="Revenue (excl. cancelled)"
+              value={Math.round(revenueExCancelled * 100) / 100}
+              prefix="₹"
+              suffix={<DollarOutlined style={{ opacity: 0.75 }} />}
+              valueStyle={{ fontWeight: 600 }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card size="small" bordered className="admin-kpi-card orders-kpi-tile">
+            <Statistic title="Avg order (excl. cancelled)" value={avgOrderValue} prefix="₹" valueStyle={{ fontWeight: 600 }} />
+            <Typography.Text type="secondary" className="orders-kpi-sub">
+              {cancelledCount} cancelled in range
+            </Typography.Text>
+          </Card>
+        </Col>
+      </Row>
+
+      {chartsVisible && (
+        <Card
+          className="orders-charts-card"
+          size="small"
+          title={
+            <Space>
+              <LineChartOutlined />
+              <span>Analytics</span>
+            </Space>
+          }
+          extra={
+            <Button type="text" size="small" onClick={() => setChartsVisible(false)}>
+              Collapse
+            </Button>
+          }
+          style={{ marginBottom: 16 }}
+        >
+          <OrderReportsCharts orders={orders} loading={loading} embedded />
+        </Card>
+      )}
+
+      <Drawer
+        title={
+          <Space>
+            <FilterOutlined />
+            <span>Filter orders</span>
+          </Space>
+        }
+        placement="right"
+        width={Math.min(420, typeof window !== 'undefined' ? window.innerWidth - 24 : 420)}
+        onClose={() => setFiltersDrawerOpen(false)}
+        open={filtersDrawerOpen}
+        destroyOnClose={false}
+        className="orders-filters-drawer"
+        footer={
+          <div className="orders-drawer-footer">
+            <Button onClick={resetFilters}>Reset to defaults</Button>
+            <Button type="primary" onClick={() => setFiltersDrawerOpen(false)}>
+              Done
+            </Button>
+          </div>
+        }
+      >
+        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+          <div>
+            <Typography.Text strong className="orders-drawer-section-title">
+              Date range
+            </Typography.Text>
+            <div style={{ marginTop: 10 }}>
+              <Segmented
+                block
+                options={PRESETS}
+                value={datePreset}
+                onChange={(v) => setDatePreset(v)}
+              />
+            </div>
+          </div>
+          {datePreset === 'custom' && (
+            <div>
+              <Typography.Text strong className="orders-drawer-section-title">
+                Calendar
+              </Typography.Text>
+              <div style={{ marginTop: 10 }}>
+                <DatePicker.RangePicker
+                  value={customRange}
+                  onChange={(v) => setCustomRange(v || [dayjs().subtract(7, 'day'), dayjs()])}
+                  format="YYYY-MM-DD"
+                  allowClear={false}
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+          )}
+          <div>
+            <Typography.Text strong className="orders-drawer-section-title">
+              Order status
+            </Typography.Text>
+            <div style={{ marginTop: 10 }}>
+              <Select
+                allowClear
+                placeholder="All statuses"
+                style={{ width: '100%' }}
+                value={statusFilter}
+                onChange={setStatusFilter}
+                options={ORDER_STATUSES.map((s) => ({ label: s, value: s }))}
+              />
+            </div>
+          </div>
+          <Divider style={{ margin: 0 }} />
+          <div>
+            <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', lineHeight: 1.6 }}>
+              Changes apply immediately. Use Export from the main toolbar to download the current result as Excel.
+            </Typography.Text>
+          </div>
+        </Space>
+      </Drawer>
+
+      <div className="admin-table-wrap orders-table-section">
+        <Table
+          columns={columns}
+          dataSource={orders}
+          loading={loading}
+          rowKey="_id"
+          scroll={{ x: isMobile ? 680 : 960 }}
+          size={isMobile ? 'small' : 'middle'}
+          tableLayout="fixed"
+          sticky
+          pagination={{
+            pageSize: 10,
+            showSizeChanger: false,
+            showQuickJumper: !isMobile,
+            size: isMobile ? 'small' : 'default',
+            showTotal: (total, range) => `${range[0]}-${range[1]} of ${total} orders`,
+            hideOnSinglePage: false,
+          }}
+        />
+      </div>
+
       <Modal
         title="Order Details"
         open={detailModalVisible}
@@ -223,7 +581,7 @@ export default function Orders() {
       >
         {selectedOrder && (
           <div>
-            <Descriptions bordered column={2}>
+            <Descriptions bordered column={2} size="small">
               <Descriptions.Item label="Order ID">{selectedOrder.orderId}</Descriptions.Item>
               <Descriptions.Item label="Status">
                 <Tag color={getStatusColor(selectedOrder.status)}>{selectedOrder.status}</Tag>
@@ -242,28 +600,32 @@ export default function Orders() {
               </Descriptions.Item>
             </Descriptions>
             <div style={{ marginTop: 16 }}>
-              <h3>Items</h3>
-              <Table
-                dataSource={selectedOrder.items}
-                columns={[
-                  { title: 'Name', dataIndex: 'name', key: 'name' },
-                  { title: 'Price', dataIndex: 'price', key: 'price', render: (p) => `₹${p}` },
-                  { title: 'Quantity', dataIndex: 'quantity', key: 'quantity' },
-                  {
-                    title: 'Total',
-                    key: 'total',
-                    render: (_, record) => `₹${record.price * record.quantity}`,
-                  },
-                ]}
-                pagination={false}
-                rowKey={(record, index) => index}
-              />
+              <Typography.Title level={5} style={{ marginBottom: 12 }}>
+                Items
+              </Typography.Title>
+              <div className="admin-table-wrap">
+                <Table
+                  dataSource={selectedOrder.items}
+                  columns={[
+                    { title: 'Name', dataIndex: 'name', key: 'name' },
+                    { title: 'Price', dataIndex: 'price', key: 'price', render: (p) => `₹${p}` },
+                    { title: 'Quantity', dataIndex: 'quantity', key: 'quantity' },
+                    {
+                      title: 'Total',
+                      key: 'total',
+                      render: (_, record) => `₹${record.price * record.quantity}`,
+                    },
+                  ]}
+                  pagination={false}
+                  rowKey={(record, index) => index}
+                  size="small"
+                />
+              </div>
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Update Status Modal */}
       <Modal
         title="Update Order Status"
         open={statusModalVisible}
@@ -295,7 +657,6 @@ export default function Orders() {
         </Form>
       </Modal>
 
-      {/* Assign Delivery Modal */}
       <Modal
         title="Assign Delivery Partner"
         open={assignModalVisible}

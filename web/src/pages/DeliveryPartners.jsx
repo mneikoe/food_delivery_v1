@@ -127,20 +127,22 @@ export default function DeliveryPartners() {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-        <h1>Delivery Partners</h1>
+    <div className="admin-page">
+      <div className="admin-page-toolbar">
         <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
           Add Delivery Partner
         </Button>
       </div>
-      <Table
-        columns={columns}
-        dataSource={partners}
-        loading={loading}
-        rowKey="_id"
-        pagination={{ pageSize: 10 }}
-      />
+      <div className="admin-table-wrap">
+        <Table
+          columns={columns}
+          dataSource={partners}
+          loading={loading}
+          rowKey="_id"
+          pagination={{ pageSize: 10 }}
+          size="middle"
+        />
+      </div>
       <Modal
         title={editingPartner ? 'Edit Delivery Partner' : 'Add Delivery Partner'}
         open={modalVisible}

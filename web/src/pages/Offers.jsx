@@ -149,20 +149,22 @@ export default function Offers() {
   ];
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between' }}>
-        <h1>Offers</h1>
+    <div className="admin-page">
+      <div className="admin-page-toolbar">
         <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
           Add Offer
         </Button>
       </div>
-      <Table
-        columns={columns}
-        dataSource={offers}
-        loading={loading}
-        rowKey="_id"
-        pagination={{ pageSize: 10 }}
-      />
+      <div className="admin-table-wrap">
+        <Table
+          columns={columns}
+          dataSource={offers}
+          loading={loading}
+          rowKey="_id"
+          pagination={{ pageSize: 10 }}
+          size="middle"
+        />
+      </div>
       <Modal
         title={editingOffer ? 'Edit Offer' : 'Add Offer'}
         open={modalVisible}

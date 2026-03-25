@@ -213,9 +213,8 @@ export default function AppSettings() {
   };
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto' }}>
-      <div style={{ marginBottom: 24 }}>
-        <Title level={2} style={{ marginBottom: 4 }}>App Settings</Title>
+    <div className="admin-page" style={{ maxWidth: 960 }}>
+      <div className="admin-page-intro">
         <Paragraph type="secondary" style={{ marginBottom: 0 }}>
           Manage APK, order window, and home screen hero slides in one place.
         </Paragraph>

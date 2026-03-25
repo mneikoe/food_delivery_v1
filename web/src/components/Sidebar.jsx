@@ -81,6 +81,7 @@ export default function Sidebar({ collapsed, onCollapse }) {
 
   return (
     <Sider
+      className="admin-sidebar"
       collapsible
       collapsed={collapsed}
       onCollapse={onCollapse}
@@ -96,20 +97,7 @@ export default function Sidebar({ collapsed, onCollapse }) {
         bottom: 0,
       }}
     >
-      <div
-        style={{
-          height: 64,
-          margin: 16,
-          background: 'rgba(255, 255, 255, 0.2)',
-          borderRadius: 8,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: 'white',
-          fontWeight: 'bold',
-          fontSize: collapsed ? 14 : 18,
-        }}
-      >
+      <div className="admin-sidebar-brand">
         {collapsed ? 'AD' : 'Admin Dashboard'}
       </div>
       <Menu
@@ -118,6 +106,7 @@ export default function Sidebar({ collapsed, onCollapse }) {
         mode="inline"
         items={menuItems}
         onClick={handleMenuClick}
+        className="admin-sidebar-menu"
       />
     </Sider>
   );
