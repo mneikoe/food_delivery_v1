@@ -75,6 +75,7 @@ export const getUserOrders = () => userApi.get('/user/orders');
 export const getUserOrderDetails = (id) => userApi.get(`/user/orders/${id}`);
 export const cancelUserOrder = (id) => userApi.post(`/user/orders/${id}/cancel`);
 export const getPublicOrderWindow = () => userApi.get('/public/order-window');
+export const getPublicHeroSlides = () => userApi.get('/public/hero-slides');
 export const updateUserLocation = (data) => userApi.post('/user/location/update', data);
 
 export default userApi;

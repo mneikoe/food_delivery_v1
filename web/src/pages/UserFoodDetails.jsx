@@ -5,12 +5,28 @@ import { ArrowLeftOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { addUserCartItem, getUserCart, getUserProducts } from '../api/userApi';
 import './UserApp.css';
 
+const FALLBACK_FOOD_IMAGE =
+  'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=1600&auto=format&fit=crop';
+
 export default function UserFoodDetails() {
   const { foodId } = useParams();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [products, setProducts] = useState([]);
   const [cartCount, setCartCount] = useState(0);
+  const [cartQtyMap, setCartQtyMap] = useState({});
+
+  const syncCartState = (cartData) => {
+    const items = cartData?.items || [];
+    setCartCount(items.reduce((sum, item) => sum + (item.quantity || 0), 0));
+    const nextMap = {};
+    items.forEach((item) => {
+      const key = item?.productId?._id || item?.productId || item?._id;
+      if (!key) return;
+      nextMap[key] = (nextMap[key] || 0) + (item.quantity || 0);
+    });
+    setCartQtyMap(nextMap);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -18,7 +34,7 @@ export default function UserFoodDetails() {
       try {
         const [productsRes, cartRes] = await Promise.all([getUserProducts(), getUserCart()]);
         setProducts(productsRes.data || []);
-        setCartCount((cartRes.data?.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0));
+        syncCartState(cartRes.data || {});
       } catch (error) {
         message.error(error.response?.data?.error || 'Failed to load item details');
       } finally {
@@ -40,6 +56,7 @@ export default function UserFoodDetails() {
     try {
       await addUserCartItem({ productId: id, quantity: 1 });
       setCartCount((prev) => prev + 1);
+      setCartQtyMap((prev) => ({ ...prev, [id]: (prev[id] || 0) + 1 }));
       message.success('Added to cart');
     } catch (error) {
       message.error(error.response?.data?.error || 'Unable to add to cart');
@@ -63,9 +80,16 @@ export default function UserFoodDetails() {
               <Col xs={24} md={10}>
                 <div className="user-product-image-wrap" style={{ height: 280, borderRadius: 12, overflow: 'hidden' }}>
                   {food.image ? (
-                    <img className="user-product-image" src={food.image} alt={food.name} />
+                    <img
+                      className="user-product-image"
+                      src={food.image}
+                      alt={food.name}
+                      onError={(e) => {
+                        e.currentTarget.src = FALLBACK_FOOD_IMAGE;
+                      }}
+                    />
                   ) : (
-                    <div className="user-product-image-placeholder">No image</div>
+                    <img className="user-product-image" src={FALLBACK_FOOD_IMAGE} alt={food.name || 'Item'} />
                   )}
                 </div>
               </Col>
@@ -84,7 +108,7 @@ export default function UserFoodDetails() {
                 </Typography.Title>
                 <Space style={{ marginTop: 12 }}>
                   <Button type="primary" icon={<ShoppingCartOutlined />} onClick={() => onAddToCart(food._id)}>
-                    Add to Cart
+                    {cartQtyMap[food._id] ? `Add to Cart (${cartQtyMap[food._id]})` : 'Add to Cart'}
                   </Button>
                   <Button onClick={() => navigate('/user/app')}>Continue Browsing</Button>
                 </Space>
@@ -100,9 +124,16 @@ export default function UserFoodDetails() {
                 <div className="h-scroll-card user-product-card" key={item._id}>
                   <div className="user-product-image-wrap">
                     {item.image ? (
-                      <img className="user-product-image" src={item.image} alt={item.name} />
+                      <img
+                        className="user-product-image"
+                        src={item.image}
+                        alt={item.name}
+                        onError={(e) => {
+                          e.currentTarget.src = FALLBACK_FOOD_IMAGE;
+                        }}
+                      />
                     ) : (
-                      <div className="user-product-image-placeholder">No image</div>
+                      <img className="user-product-image" src={FALLBACK_FOOD_IMAGE} alt={item.name || 'Item'} />
                     )}
                   </div>
                   <div style={{ padding: 10 }}>

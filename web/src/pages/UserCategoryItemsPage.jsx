@@ -5,6 +5,9 @@ import { Badge, Button, Card, Empty, Input, Space, Typography, message } from 'a
 import { addUserCartItem, getUserCart, getUserCategories, getUserProducts } from '../api/userApi';
 import './UserApp.css';
 
+const FALLBACK_FOOD_IMAGE =
+  'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=1600&auto=format&fit=crop';
+
 export default function UserCategoryItemsPage() {
   const { categoryId } = useParams();
   const navigate = useNavigate();
@@ -13,6 +16,19 @@ export default function UserCategoryItemsPage() {
   const [products, setProducts] = useState([]);
   const [search, setSearch] = useState('');
   const [cartCount, setCartCount] = useState(0);
+  const [cartQtyMap, setCartQtyMap] = useState({});
+
+  const syncCartState = (cartData) => {
+    const items = cartData?.items || [];
+    setCartCount(items.reduce((sum, item) => sum + (item.quantity || 0), 0));
+    const nextMap = {};
+    items.forEach((item) => {
+      const key = item?.productId?._id || item?.productId || item?._id;
+      if (!key) return;
+      nextMap[key] = (nextMap[key] || 0) + (item.quantity || 0);
+    });
+    setCartQtyMap(nextMap);
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -25,7 +41,7 @@ export default function UserCategoryItemsPage() {
         ]);
         setCategories(categoriesRes.data || []);
         setProducts(productsRes.data || []);
-        setCartCount((cartRes.data?.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0));
+        syncCartState(cartRes.data || {});
       } catch (error) {
         message.error(error.response?.data?.error || 'Failed to load category items');
       } finally {
@@ -53,6 +69,7 @@ export default function UserCategoryItemsPage() {
     try {
       await addUserCartItem({ productId, quantity: 1 });
       setCartCount((prev) => prev + 1);
+      setCartQtyMap((prev) => ({ ...prev, [productId]: (prev[productId] || 0) + 1 }));
       message.success('Added to cart');
     } catch (error) {
       message.error(error.response?.data?.error || 'Unable to add to cart');
@@ -101,9 +118,16 @@ export default function UserCategoryItemsPage() {
                   className="user-item-grid-card"
                   cover={
                     item.image ? (
-                      <img src={item.image} alt={item.name} className="user-grid-card-image" />
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="user-grid-card-image"
+                        onError={(e) => {
+                          e.currentTarget.src = FALLBACK_FOOD_IMAGE;
+                        }}
+                      />
                     ) : (
-                      <div className="user-grid-card-image user-product-image-placeholder">No image</div>
+                      <img src={FALLBACK_FOOD_IMAGE} alt={item.name || 'Item'} className="user-grid-card-image" />
                     )
                   }
                 >
@@ -120,7 +144,7 @@ export default function UserCategoryItemsPage() {
                         View
                       </Button>
                       <Button type="primary" size="small" onClick={() => onAddToCart(item._id)}>
-                        Add
+                        {cartQtyMap[item._id] ? `Add (${cartQtyMap[item._id]})` : 'Add'}
                       </Button>
                     </Space>
                   </div>

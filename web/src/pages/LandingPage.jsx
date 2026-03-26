@@ -19,6 +19,9 @@ import { addUserCartItem, getUserCart, getUserCategories, getUserProducts } from
 import logoImage from '../assets/logo-chatora.png';
 import './LandingPage.css';
 
+const FALLBACK_FOOD_IMAGE =
+  'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=1600&auto=format&fit=crop';
+
 export default function LandingPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
@@ -27,8 +30,21 @@ export default function LandingPage() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
+  const [cartQtyMap, setCartQtyMap] = useState({});
   const userToken = localStorage.getItem('user_token');
   const isLoggedIn = Boolean(userToken);
+
+  const syncCartState = (cartData) => {
+    const items = cartData?.items || [];
+    setCartCount(items.reduce((sum, item) => sum + (item.quantity || 0), 0));
+    const nextMap = {};
+    items.forEach((item) => {
+      const key = item?.productId?._id || item?.productId || item?._id;
+      if (!key) return;
+      nextMap[key] = (nextMap[key] || 0) + (item.quantity || 0);
+    });
+    setCartQtyMap(nextMap);
+  };
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -43,7 +59,7 @@ export default function LandingPage() {
         const catData = catRes.data || [];
         setCategories(catData);
         setProducts(productRes.data || []);
-        setCartCount((cartRes.data?.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0));
+        syncCartState(cartRes.data || {});
         if (catData.length) {
           setSelectedCategory(catData[0]._id);
         }
@@ -70,6 +86,7 @@ export default function LandingPage() {
     try {
       await addUserCartItem({ productId, quantity: 1 });
       setCartCount((prev) => prev + 1);
+      setCartQtyMap((prev) => ({ ...prev, [productId]: (prev[productId] || 0) + 1 }));
       message.success('Added to cart');
     } catch (error) {
       message.error(error.response?.data?.error || 'Unable to add to cart');
@@ -154,10 +171,10 @@ export default function LandingPage() {
             </Button>
           </Space>
         </div>
-        <div className="hero-image-v2">
+        <div className="hero-static-image">
           <img
-            src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=1400&auto=format&fit=crop"
-            alt="Food spread"
+            src={FALLBACK_FOOD_IMAGE}
+            alt="Delicious food"
           />
         </div>
       </section>
@@ -224,7 +241,17 @@ export default function LandingPage() {
                 {selectedFoods.map((food) => (
                   <article className="h-scroll-card food-card" key={food._id}>
                     <div className="food-image-wrap">
-                      {food.image ? <img src={food.image} alt={food.name} /> : <div className="food-image-empty">No image</div>}
+                      {food.image ? (
+                        <img
+                          src={food.image}
+                          alt={food.name}
+                          onError={(e) => {
+                            e.currentTarget.src = FALLBACK_FOOD_IMAGE;
+                          }}
+                        />
+                      ) : (
+                        <img src={FALLBACK_FOOD_IMAGE} alt={food.name || 'Food item'} />
+                      )}
                     </div>
                     <div className="food-card-body">
                       <Typography.Text strong>{food.name}</Typography.Text>
@@ -243,7 +270,7 @@ export default function LandingPage() {
                             icon={<ShoppingCartOutlined />}
                             onClick={() => onAddToCart(food._id)}
                           >
-                            Add
+                            {cartQtyMap[food._id] ? `Add (${cartQtyMap[food._id]})` : 'Add'}
                           </Button>
                         </Space>
                       </div>

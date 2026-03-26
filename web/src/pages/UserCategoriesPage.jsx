@@ -1,21 +1,23 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeftOutlined, RightOutlined } from '@ant-design/icons';
-import { Button, Card, Empty, Skeleton, Space, Typography, message } from 'antd';
-import { getUserCategories } from '../api/userApi';
+import { ArrowLeftOutlined, RightOutlined, ShoppingCartOutlined } from '@ant-design/icons';
+import { Badge, Button, Card, Empty, Skeleton, Space, Typography, message } from 'antd';
+import { getUserCart, getUserCategories } from '../api/userApi';
 import './UserApp.css';
 
 export default function UserCategoriesPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [categories, setCategories] = useState([]);
+  const [cartCount, setCartCount] = useState(0);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
-        const res = await getUserCategories();
-        setCategories((res.data || []).filter((item) => item?.isActive !== false));
+        const [categoriesRes, cartRes] = await Promise.all([getUserCategories(), getUserCart()]);
+        setCategories((categoriesRes.data || []).filter((item) => item?.isActive !== false));
+        setCartCount((cartRes.data?.items || []).reduce((sum, item) => sum + (item.quantity || 0), 0));
       } catch (error) {
         message.error(error.response?.data?.error || 'Failed to load categories');
       } finally {
@@ -87,6 +89,19 @@ export default function UserCategoriesPage() {
             </div>
           )}
         </Space>
+        {cartCount > 0 && (
+          <Badge count={cartCount} className="floating-cart-badge">
+            <Button
+              type="primary"
+              size="large"
+              className="floating-cart-btn"
+              icon={<ShoppingCartOutlined />}
+              onClick={() => navigate('/user/app')}
+            >
+              Go to Cart
+            </Button>
+          </Badge>
+        )}
       </div>
     </div>
   );

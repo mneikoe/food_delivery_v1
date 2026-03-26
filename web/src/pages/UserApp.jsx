@@ -65,6 +65,8 @@ import './UserApp.css';
 const DELIVERY_FEE = 28;
 const TAX_PERCENT = 0.05;
 const WHATSAPP_PHONE_REGEX = /^\+?[1-9]\d{9,14}$/;
+const FALLBACK_FOOD_IMAGE =
+  'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=1600&auto=format&fit=crop';
 const SUPPORT_PHONE_DISPLAY = '+91 9111021231';
 const SUPPORT_PHONE_LINK = '919111021231';
 
@@ -287,6 +289,15 @@ export default function UserApp() {
     () => (cart.items || []).reduce((sum, i) => sum + (i.quantity || 0), 0),
     [cart]
   );
+  const cartQtyMap = useMemo(() => {
+    const map = {};
+    (cart.items || []).forEach((item) => {
+      const key = item?.productId?._id || item?.productId || item?._id;
+      if (!key) return;
+      map[key] = (map[key] || 0) + (item.quantity || 0);
+    });
+    return map;
+  }, [cart.items]);
 
   const discount = appliedCoupon?.discount || 0;
   const tax = useMemo(() => ((cart.subtotal || 0) + DELIVERY_FEE) * TAX_PERCENT, [cart.subtotal]);
@@ -729,9 +740,16 @@ export default function UserApp() {
                 <div className="h-scroll-card user-product-card" key={product._id}>
                   <div className="user-product-image-wrap">
                     {product.image ? (
-                      <img className="user-product-image" src={product.image} alt={product.name} />
+                      <img
+                        className="user-product-image"
+                        src={product.image}
+                        alt={product.name}
+                        onError={(e) => {
+                          e.currentTarget.src = FALLBACK_FOOD_IMAGE;
+                        }}
+                      />
                     ) : (
-                      <div className="user-product-image-placeholder">No image</div>
+                      <img className="user-product-image" src={FALLBACK_FOOD_IMAGE} alt={product.name || 'Item'} />
                     )}
                   </div>
                   <div style={{ padding: 10 }}>
@@ -746,7 +764,7 @@ export default function UserApp() {
                           View
                         </Button>
                         <Button type="primary" size="small" onClick={() => onAddToCart(product._id)}>
-                          Add
+                          {cartQtyMap[product._id] ? `Add (${cartQtyMap[product._id]})` : 'Add'}
                         </Button>
                       </Space>
                     </Space>
@@ -793,67 +811,72 @@ export default function UserApp() {
                 <Tag color="warning">Name + WhatsApp number required before order</Tag>
               )}
             </Space>
-            <Typography.Paragraph type="secondary">
-              Payment method on website is COD only. Select address and place order.
-            </Typography.Paragraph>
-            <div className="checkout-inline">
-              <Typography.Text strong>Select delivery address</Typography.Text>
-              <Radio.Group
-                value={selectedAddressId}
-                onChange={(e) => setSelectedAddressId(e.target.value)}
-                style={{ marginTop: 10, width: '100%' }}
-              >
-                <Space direction="vertical" style={{ width: '100%' }}>
-                  {addresses.map((addr) => (
-                    <Radio key={addr._id} value={addr._id}>
-                      <span>
-                        <strong>{addr.title}</strong> - {addr.addressLine1}, {addr.city}, {addr.state} {addr.pincode}
-                      </span>
-                    </Radio>
-                  ))}
+            {!cart.items?.length ? (
+              <Empty description="Cart is empty" style={{ marginTop: 20 }} />
+            ) : (
+              <>
+                <Typography.Paragraph type="secondary">
+                  Payment method on website is COD only. Select address and place order.
+                </Typography.Paragraph>
+                <div className="checkout-inline">
+                  <Typography.Text strong>Select delivery address</Typography.Text>
+                  <Radio.Group
+                    value={selectedAddressId}
+                    onChange={(e) => setSelectedAddressId(e.target.value)}
+                    style={{ marginTop: 10, width: '100%' }}
+                  >
+                    <Space direction="vertical" style={{ width: '100%' }}>
+                      {addresses.map((addr) => (
+                        <Radio key={addr._id} value={addr._id}>
+                          <span>
+                            <strong>{addr.title}</strong> - {addr.addressLine1}, {addr.city}, {addr.state} {addr.pincode}
+                          </span>
+                        </Radio>
+                      ))}
+                    </Space>
+                  </Radio.Group>
+                </div>
+                <Space style={{ marginTop: 14 }} wrap>
+                  <Input
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                    placeholder="Coupon code"
+                    style={{ width: 180 }}
+                  />
+                  <Button loading={applyingCoupon} onClick={onApplyCoupon}>
+                    Apply coupon
+                  </Button>
+                  {appliedCoupon?.code && <Tag color="green">{appliedCoupon.code}</Tag>}
                 </Space>
-              </Radio.Group>
-            </div>
-            <Space style={{ marginTop: 14 }} wrap>
-              <Input
-                value={couponCode}
-                onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                placeholder="Coupon code"
-                style={{ width: 180 }}
-              />
-              <Button loading={applyingCoupon} onClick={onApplyCoupon}>
-                Apply coupon
-              </Button>
-              {appliedCoupon?.code && <Tag color="green">{appliedCoupon.code}</Tag>}
-            </Space>
-            {!!coupons.length && (
-              <Space wrap style={{ marginTop: 10 }}>
-                <Typography.Text type="secondary">Available:</Typography.Text>
-                {coupons.map((c) => (
-                  <Tag key={c.code} color="blue" onClick={() => setCouponCode(c.code)} style={{ cursor: 'pointer' }}>
-                    {c.code}
-                  </Tag>
-                ))}
-              </Space>
+                {!!coupons.length && (
+                  <Space wrap style={{ marginTop: 10 }}>
+                    <Typography.Text type="secondary">Available:</Typography.Text>
+                    {coupons.map((c) => (
+                      <Tag key={c.code} color="blue" onClick={() => setCouponCode(c.code)} style={{ cursor: 'pointer' }}>
+                        {c.code}
+                      </Tag>
+                    ))}
+                  </Space>
+                )}
+
+                <div className="checkout-summary">
+                  <div><span>Subtotal:</span> <strong>₹{(cart.subtotal || 0).toFixed(2)}</strong></div>
+                  <div><span>Delivery fee:</span> <strong>₹{DELIVERY_FEE.toFixed(2)}</strong></div>
+                  <div><span>Tax:</span> <strong>₹{tax.toFixed(2)}</strong></div>
+                  <div><span>Discount:</span> <strong>- ₹{discount.toFixed(2)}</strong></div>
+                  <div className="checkout-total"><span>Total payable (COD):</span> <strong>₹{payable.toFixed(2)}</strong></div>
+                </div>
+
+                <Button
+                  type="primary"
+                  size="large"
+                  loading={checkoutLoading}
+                  onClick={onPlaceOrder}
+                >
+                  Place Order (COD)
+                </Button>
+              </>
             )}
-
-            <div className="checkout-summary">
-              <div><span>Subtotal:</span> <strong>₹{(cart.subtotal || 0).toFixed(2)}</strong></div>
-              <div><span>Delivery fee:</span> <strong>₹{DELIVERY_FEE.toFixed(2)}</strong></div>
-              <div><span>Tax:</span> <strong>₹{tax.toFixed(2)}</strong></div>
-              <div><span>Discount:</span> <strong>- ₹{discount.toFixed(2)}</strong></div>
-              <div className="checkout-total"><span>Total payable (COD):</span> <strong>₹{payable.toFixed(2)}</strong></div>
-            </div>
-
-            <Button
-              type="primary"
-              size="large"
-              loading={checkoutLoading}
-              disabled={!cart.items?.length}
-              onClick={onPlaceOrder}
-            >
-              Place Order (COD)
-            </Button>
           </Card>
         )}
 
@@ -957,6 +980,19 @@ export default function UserApp() {
           </Row>
         )}
       </div>
+      {cartCount > 0 && (
+        <Badge count={cartCount} className="floating-cart-badge">
+          <Button
+            type="primary"
+            size="large"
+            className="floating-cart-btn"
+            icon={<ShoppingCartOutlined />}
+            onClick={() => setActiveTab('cart')}
+          >
+            Go to Cart
+          </Button>
+        </Badge>
+      )}
 
       <Drawer
         title={`Cart (${cartCount})`}
@@ -967,29 +1003,31 @@ export default function UserApp() {
         {(cart.items || []).length === 0 ? (
           <Empty description="Cart is empty" />
         ) : (
-          <List
-            dataSource={cart.items}
-            renderItem={(item) => (
-              <List.Item>
-                <List.Item.Meta
-                  title={item.name}
-                  description={`₹${item.price} each`}
-                />
-                <Space>
-                  <Button size="small" icon={<MinusOutlined />} onClick={() => onUpdateCartItem(item, -1)} />
-                  <span>{item.quantity}</span>
-                  <Button size="small" icon={<PlusOutlined />} onClick={() => onUpdateCartItem(item, 1)} />
-                </Space>
-              </List.Item>
-            )}
-          />
+          <>
+            <List
+              dataSource={cart.items}
+              renderItem={(item) => (
+                <List.Item>
+                  <List.Item.Meta
+                    title={item.name}
+                    description={`₹${item.price} each`}
+                  />
+                  <Space>
+                    <Button size="small" icon={<MinusOutlined />} onClick={() => onUpdateCartItem(item, -1)} />
+                    <span>{item.quantity}</span>
+                    <Button size="small" icon={<PlusOutlined />} onClick={() => onUpdateCartItem(item, 1)} />
+                  </Space>
+                </List.Item>
+              )}
+            />
+            <div className="cart-drawer-footer">
+              <div><span>Subtotal:</span><strong> ₹{(cart.subtotal || 0).toFixed(2)}</strong></div>
+              <Button type="primary" block onClick={() => { setActiveTab('cart'); setCartDrawerOpen(false); }}>
+                Go to Checkout
+              </Button>
+            </div>
+          </>
         )}
-        <div className="cart-drawer-footer">
-          <div><span>Subtotal:</span><strong> ₹{(cart.subtotal || 0).toFixed(2)}</strong></div>
-          <Button type="primary" block onClick={() => { setActiveTab('cart'); setCartDrawerOpen(false); }}>
-            Go to Checkout
-          </Button>
-        </div>
       </Drawer>
 
       <Modal
