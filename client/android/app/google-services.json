@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1092245213749",
+    "project_id": "chatoraadda-2fc77",
+    "storage_bucket": "chatoraadda-2fc77.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1092245213749:android:13b6ecc7b81950c7c9977c",
+        "android_client_info": {
+          "package_name": "com.amnrj.fooddelivery"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjWHISdRU5BUfepv-RqEukfhpdNXSpjXA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
