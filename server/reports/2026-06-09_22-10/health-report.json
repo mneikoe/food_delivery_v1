@@ -1,0 +1,8 @@
+{
+  "timestamp": "2026-06-09T16:40:34.600Z",
+  "status": "ok",
+  "database": "disconnected",
+  "nodeVersion": "v24.16.0",
+  "version": "1.0.0",
+  "environment": "development"
+}

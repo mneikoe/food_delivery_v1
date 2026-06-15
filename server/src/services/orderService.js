@@ -89,30 +89,60 @@ class OrderService {
   }
 
   async notifyOrderUpdate(order) {
-    // Notify user
-    await supabase.channel(`user_${order.userId}_orders`).send({
-      type: "broadcast",
-      event: "order_update",
-      payload: { orderId: order._id, status: order.status },
-    });
+    try {
+      const User = require("../models/User");
+      const pushService = require("../services/pushService");
 
-    // Notify delivery partner if assigned
-    if (order.deliveryPartnerId) {
-      await supabase
-        .channel(`delivery_${order.deliveryPartnerId}_orders`)
-        .send({
-          type: "broadcast",
-          event: "order_update",
-          payload: { orderId: order._id, status: order.status },
-        });
+      // Fetch user profile and check for tokens & preferences
+      const user = await User.findById(order.userId);
+      if (user && user.fcmTokens && user.fcmTokens.length > 0) {
+        // Enforce user preference check: order updates should be enabled (default: true)
+        const orderPref = user.notificationSettings ? user.notificationSettings.orderUpdates !== false : true;
+        if (orderPref) {
+          const tokens = user.fcmTokens.map((t) => t.token);
+
+          // Customize headers and body descriptors based on order state transitions
+          let title = "Order Update";
+          let body = `Your order status has changed to ${order.status.replace(/_/g, " ")}.`;
+
+          if (order.status === "CREATED") {
+            title = "🍔 Order Placed successfully!";
+            body = `Thank you! Your order is placed and is currently being validated.`;
+          } else if (order.status === "ACCEPTED_BY_ADMIN") {
+            title = "✅ Order Accepted";
+            body = "Great news! The kitchen has accepted your order and will start preparing it.";
+          } else if (order.status === "ASSIGNED_TO_DELIVERY") {
+            title = "🛵 Rider Assigned";
+            body = "A delivery rider has been assigned to your order and is heading to the store.";
+          } else if (order.status === "OUT_FOR_DELIVERY") {
+            title = "🛵 Out for Delivery";
+            body = `Hang tight! Our delivery partner is on the way to your address.`;
+          } else if (order.status === "ARRIVED_AT_LOCATION") {
+            title = "🚪 Rider Arrived at Doorstep!";
+            body = `Our rider has arrived at your doorsteps with your order! Please share OTP: ${order.deliveryOTP?.code || ""} to collect it.`;
+          } else if (order.status === "DELIVERED") {
+            title = "🎉 Delivered! Enjoy your meal";
+            body = `Your order #${order.orderId} was successfully delivered. Rate us now!`;
+          } else if (order.status === "CANCELLED") {
+            title = "❌ Order Cancelled";
+            body = `Your order #${order.orderId} was cancelled. Any coins spent have been refunded.`;
+          }
+
+          const payload = {
+            title,
+            body,
+            data: {
+              type: "ORDER",
+              orderId: order._id.toString(),
+            },
+          };
+
+          await pushService.sendPushNotification(tokens, payload, user._id);
+        }
+      }
+    } catch (err) {
+      console.error("[Order Push Trigger] Failed to dispatch push transition:", err.message);
     }
-
-    // Notify admin
-    await supabase.channel("admin_orders").send({
-      type: "broadcast",
-      event: "order_update",
-      payload: { orderId: order._id, status: order.status },
-    });
   }
 
   async getDeliveryLocations(orderId) {
@@ -136,16 +166,8 @@ class OrderService {
 
     await location.save();
 
-    // Broadcast location update via Supabase
-    await supabase.channel(`order_${orderId}_tracking`).send({
-      type: "broadcast",
-      event: "location_update",
-      payload: {
-        orderId,
-        location: coordinates,
-        timestamp: new Date().toISOString(),
-      },
-    });
+    // Future: broadcast location update via Socket.IO
+    // io.to(`order_${orderId}_tracking`).emit('location_update', { orderId, location: coordinates });
 
     return location;
   }

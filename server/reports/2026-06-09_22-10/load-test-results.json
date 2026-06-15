@@ -1,0 +1,15 @@
+{
+  "timestamp": "2026-06-09T16:40:33.021Z",
+  "vus": 50,
+  "target": "http://localhost:8080/health",
+  "metrics": {
+    "latency": {
+      "avg": 42.7,
+      "p95": 98.34,
+      "p99": 142.17
+    },
+    "throughput": 510,
+    "errorRate": 0,
+    "totalRequests": 7500
+  }
+}

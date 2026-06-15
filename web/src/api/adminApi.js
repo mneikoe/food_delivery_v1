@@ -63,12 +63,23 @@ export const login = async (email, otp) => {
   const response = await api.post('/auth/verify-email-otp', { email, otp });
   if (response.data.token) {
     localStorage.setItem('admin_token', response.data.token);
+    if (response.data.user) localStorage.setItem('admin_data', JSON.stringify(response.data.user));
   }
   return response.data;
 };
 
 export const sendOtp = async (email) => {
   return await api.post('/auth/send-email-otp', { email });
+};
+
+// Admin: Email + Password login
+export const adminLoginWithPassword = async (email, password) => {
+  const response = await api.post('/auth/login', { email, password });
+  if (response.data.token) {
+    localStorage.setItem('admin_token', response.data.token);
+    if (response.data.user) localStorage.setItem('admin_data', JSON.stringify(response.data.user));
+  }
+  return response.data;
 };
 
 // Categories
@@ -130,5 +141,21 @@ export const uploadHeroImage = (formData, slideIndex) =>
   api.post(`/admin/hero-slides/upload?slideIndex=${slideIndex}`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
+
+export const getCoinSettings = () => api.get('/admin/coin-settings');
+export const updateCoinSettings = (data) => api.put('/admin/coin-settings', data);
+
+// Gamification API Functions
+export const getGamificationSettings = () => api.get('/admin/gamification/settings');
+export const updateGamificationSettings = (data) => api.put('/admin/gamification/settings', data);
+export const getRewardTiers = () => api.get('/admin/gamification/reward-tiers');
+export const createRewardTier = (data) => api.post('/admin/gamification/reward-tiers', data);
+export const updateRewardTier = (id, data) => api.put(`/admin/gamification/reward-tiers/${id}`, data);
+export const deleteRewardTier = (id) => api.delete(`/admin/gamification/reward-tiers/${id}`);
+export const getMissions = () => api.get('/admin/gamification/missions');
+export const createMission = (data) => api.post('/admin/gamification/missions', data);
+export const updateMission = (id, data) => api.put(`/admin/gamification/missions/${id}`, data);
+export const deleteMission = (id) => api.delete(`/admin/gamification/missions/${id}`);
+export const getCoinTransactions = () => api.get('/admin/gamification/transactions');
 
 export default api;

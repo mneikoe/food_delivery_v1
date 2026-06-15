@@ -5,6 +5,11 @@ const Offer = require("../models/Offer");
 const Order = require("../models/Order");
 const User = require("../models/User");
 const orderService = require("../services/orderService");
+const { logAudit } = require("../utils/auditLogger");
+const GameEconomySettings = require("../models/GameEconomySettings");
+const RewardTier = require("../models/RewardTier");
+const MissionTemplate = require("../models/MissionTemplate");
+const CoinTransaction = require("../models/CoinTransaction");
 
 // Categories
 exports.getCategories = async (req, res) => {
@@ -20,6 +25,13 @@ exports.createCategory = async (req, res) => {
   try {
     const category = new Category(req.body);
     await category.save();
+    await logAudit({
+      action: "CATEGORY_CREATE",
+      actorId: req.user?._id,
+      entityType: "Category",
+      entityId: category._id.toString(),
+      metadata: { name: category.name }
+    });
     res.status(201).json(category);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -37,6 +49,14 @@ exports.updateCategory = async (req, res) => {
       return res.status(404).json({ error: "Category not found" });
     }
 
+    await logAudit({
+      action: "CATEGORY_UPDATE",
+      actorId: req.user?._id,
+      entityType: "Category",
+      entityId: category._id.toString(),
+      metadata: req.body
+    });
+
     res.json(category);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -50,6 +70,14 @@ exports.deleteCategory = async (req, res) => {
     if (!category) {
       return res.status(404).json({ error: "Category not found" });
     }
+
+    await logAudit({
+      action: "CATEGORY_DELETE",
+      actorId: req.user?._id,
+      entityType: "Category",
+      entityId: req.params.id,
+      metadata: { name: category.name }
+    });
 
     res.json({ success: true });
   } catch (error) {
@@ -73,6 +101,13 @@ exports.createProduct = async (req, res) => {
   try {
     const product = new Product(req.body);
     await product.save();
+    await logAudit({
+      action: "PRODUCT_CREATE",
+      actorId: req.user?._id,
+      entityType: "Product",
+      entityId: product._id.toString(),
+      metadata: { name: product.name, price: product.price }
+    });
     res.status(201).json(product);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -90,6 +125,14 @@ exports.updateProduct = async (req, res) => {
       return res.status(404).json({ error: "Product not found" });
     }
 
+    await logAudit({
+      action: "PRODUCT_UPDATE",
+      actorId: req.user?._id,
+      entityType: "Product",
+      entityId: product._id.toString(),
+      metadata: req.body
+    });
+
     res.json(product);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -103,6 +146,14 @@ exports.deleteProduct = async (req, res) => {
     if (!product) {
       return res.status(404).json({ error: "Product not found" });
     }
+
+    await logAudit({
+      action: "PRODUCT_DELETE",
+      actorId: req.user?._id,
+      entityType: "Product",
+      entityId: req.params.id,
+      metadata: { name: product.name }
+    });
 
     res.json({ success: true });
   } catch (error) {
@@ -118,6 +169,13 @@ exports.createCoupon = async (req, res) => {
       code: req.body.code.toUpperCase(),
     });
     await coupon.save();
+    await logAudit({
+      action: "COUPON_CREATE",
+      actorId: req.user?._id,
+      entityType: "Coupon",
+      entityId: coupon._id.toString(),
+      metadata: { code: coupon.code, discountType: coupon.discountType, discountValue: coupon.discountValue }
+    });
     res.status(201).json(coupon);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -144,6 +202,14 @@ exports.updateCoupon = async (req, res) => {
       return res.status(404).json({ error: "Coupon not found" });
     }
 
+    await logAudit({
+      action: "COUPON_UPDATE",
+      actorId: req.user?._id,
+      entityType: "Coupon",
+      entityId: coupon._id.toString(),
+      metadata: req.body
+    });
+
     res.json(coupon);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -157,6 +223,14 @@ exports.deleteCoupon = async (req, res) => {
     if (!coupon) {
       return res.status(404).json({ error: "Coupon not found" });
     }
+
+    await logAudit({
+      action: "COUPON_DELETE",
+      actorId: req.user?._id,
+      entityType: "Coupon",
+      entityId: req.params.id,
+      metadata: { code: coupon.code }
+    });
 
     res.json({ success: true });
   } catch (error) {
@@ -209,6 +283,15 @@ exports.updateOrderStatus = async (req, res) => {
   try {
     const { status } = req.body;
     const order = await orderService.updateOrderStatus(req.params.id, status);
+    
+    await logAudit({
+      action: "ORDER_STATUS_CHANGE",
+      actorId: req.user?._id,
+      entityType: "Order",
+      entityId: req.params.id,
+      metadata: { status }
+    });
+
     res.json(order);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -568,6 +651,157 @@ exports.uploadHeroImage = async (req, res) => {
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
     const url = `${baseUrl.replace(/\/$/, "")}/uploads/hero/${req.file.filename}`;
     res.json({ url, filename: req.file.filename });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.getCoinSettings = async (req, res) => {
+  try {
+    const coinSettings = require("../utils/coinSettings");
+    res.json(coinSettings.getCoinSettings());
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateCoinSettings = async (req, res) => {
+  try {
+    const coinSettings = require("../utils/coinSettings");
+    const { coinsPerRupee, maxPlaysPerDay } = req.body;
+    const updated = coinSettings.setCoinSettings({ coinsPerRupee, maxPlaysPerDay });
+    res.json(updated);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Singleton GameEconomySettings Handlers
+exports.getGamificationSettings = async (req, res) => {
+  try {
+    let settings = await GameEconomySettings.findOne({ isActive: true });
+    if (!settings) {
+      settings = new GameEconomySettings({
+        maxDailyPlays: 5,
+        coinsPerTreat: 5,
+        goldenBoneSpawnChance: 0.05,
+        goldenBoneReward: 25,
+        streakRewards: { "1": 10, "2": 15, "3": 20, "4": 25, "5": 30, "6": 35, "7": 50 },
+        weeklyCoinRedemptionLimit: 500,
+        dailyRewardAmount: 10,
+        maxCoinsPerGame: 50,
+        isActive: true
+      });
+      await settings.save();
+    }
+    res.json(settings);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateGamificationSettings = async (req, res) => {
+  try {
+    let settings = await GameEconomySettings.findOne({ isActive: true });
+    if (!settings) {
+      settings = new GameEconomySettings({ isActive: true });
+    }
+    Object.assign(settings, req.body);
+    await settings.save();
+    res.json(settings);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// RewardTier Handlers
+exports.getRewardTiers = async (req, res) => {
+  try {
+    const list = await RewardTier.find().sort({ sortOrder: 1, coinsRequired: 1 });
+    res.json(list);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.createRewardTier = async (req, res) => {
+  try {
+    const tier = new RewardTier(req.body);
+    await tier.save();
+    res.status(201).json(tier);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateRewardTier = async (req, res) => {
+  try {
+    const tier = await RewardTier.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    if (!tier) return res.status(404).json({ error: "Reward tier not found" });
+    res.json(tier);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.deleteRewardTier = async (req, res) => {
+  try {
+    const tier = await RewardTier.findByIdAndDelete(req.params.id);
+    if (!tier) return res.status(404).json({ error: "Reward tier not found" });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// MissionTemplate Handlers
+exports.getMissions = async (req, res) => {
+  try {
+    const list = await MissionTemplate.find().sort({ difficulty: 1, name: 1 });
+    res.json(list);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.createMission = async (req, res) => {
+  try {
+    const mission = new MissionTemplate(req.body);
+    await mission.save();
+    res.status(201).json(mission);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateMission = async (req, res) => {
+  try {
+    const mission = await MissionTemplate.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true });
+    if (!mission) return res.status(404).json({ error: "Mission not found" });
+    res.json(mission);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.deleteMission = async (req, res) => {
+  try {
+    const mission = await MissionTemplate.findByIdAndDelete(req.params.id);
+    if (!mission) return res.status(404).json({ error: "Mission not found" });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// Coin Transaction Audit Ledger
+exports.getCoinTransactions = async (req, res) => {
+  try {
+    const list = await CoinTransaction.find()
+      .populate("userId", "name email")
+      .sort({ createdAt: -1 })
+      .limit(100);
+    res.json(list);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

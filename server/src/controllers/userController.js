@@ -105,6 +105,12 @@ exports.deleteAddress = async (req, res) => {
 };
 
 // Categories & Products
+exports.clearCart = (userId) => {
+  delete userCarts[userId];
+};
+
+module.exports = exports;
+
 exports.getCategories = async (req, res) => {
   try {
     const categories = await Category.find({ isActive: true })
@@ -232,11 +238,14 @@ exports.createOrder = async (req, res) => {
       return res.status(503).json({ error: windowStatus.message });
     }
 
-    const { addressId, paymentMethod = "COD", couponCode } = req.body;
+    const { addressId, paymentMethod = "COD", couponCode, redeemCoins } = req.body;
     const userId = req.user._id;
 
     // Check if user has phone number
     const user = await User.findById(userId);
+    if (user.isEmailVerified === false) {
+      return res.status(403).json({ error: "Email verification required. Please login using OTP to verify and place orders." });
+    }
     if (!user.phone || user.phone.trim() === "") {
       return res.status(400).json({ error: "Phone number is required to place an order" });
     }
@@ -294,7 +303,7 @@ exports.createOrder = async (req, res) => {
           cart.subtotal,
           userId
         );
-        discount = validation.discount;
+        discount = Math.ceil(validation.discount);
         appliedCouponCode = validation.code;
 
         // Increment coupon usage count
@@ -311,8 +320,33 @@ exports.createOrder = async (req, res) => {
     // Create order
     const deliveryFee = 28;
     const subtotalWithFee = cart.subtotal + deliveryFee;
-    const tax = subtotalWithFee * 0.05; // 5% tax
-    const totalAmount = subtotalWithFee - discount + tax;
+    const tax = Math.ceil(subtotalWithFee * 0.05); // 5% tax
+    
+    // Calculate coin discount if requested (uses admin setting coinsPerRupee)
+    let coinDiscount = 0;
+    let coinsRedeemed = 0;
+
+    if (redeemCoins) {
+      const coinSettings = require("../utils/coinSettings");
+      const { coinsPerRupee } = coinSettings.getCoinSettings();
+      const userCoins = user.coins || 0;
+      const blocksOf100 = Math.floor(userCoins / 100);
+      if (blocksOf100 > 0) {
+        const totalRedeemableCoins = blocksOf100 * 100;
+        const potentialDiscount = Math.ceil(totalRedeemableCoins / coinsPerRupee);
+        
+        const remainingToPay = subtotalWithFee - discount + tax;
+        if (potentialDiscount > remainingToPay) {
+          coinDiscount = Math.ceil(remainingToPay);
+          coinsRedeemed = Math.ceil(coinDiscount * coinsPerRupee);
+        } else {
+          coinDiscount = potentialDiscount;
+          coinsRedeemed = totalRedeemableCoins;
+        }
+      }
+    }
+
+    const totalAmount = Math.ceil(subtotalWithFee - discount - coinDiscount + tax);
     
     const orderData = {
       deliveryAddress,
@@ -326,17 +360,102 @@ exports.createOrder = async (req, res) => {
       deliveryFee: deliveryFee,
       tax: tax,
       discount: discount,
+      coinDiscount: coinDiscount,
+      coinsRedeemed: coinsRedeemed,
       couponCode: appliedCouponCode,
-      totalAmount: totalAmount,
-      paymentMethod,
+      totalAmount: Math.max(totalAmount, 0),
+      paymentMethod: ["COD", "RAZORPAY"].includes(paymentMethod) ? paymentMethod : "COD",
+      paymentStatus: paymentMethod === "RAZORPAY" ? "PENDING" : "NA",
     };
 
     const order = await orderService.createOrder(userId, orderData);
 
-    // Clear cart
-    delete userCarts[userId];
+    // Deduct coins from user if redeemed
+    if (coinsRedeemed > 0) {
+      user.coins = Math.max(0, (user.coins || 0) - coinsRedeemed);
+      await user.save();
+    }
+
+    // Clear cart only if not paying online (online verification clears it later)
+    if (paymentMethod !== "RAZORPAY") {
+      delete userCarts[userId];
+    }
 
     res.status(201).json(order);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.previewOrder = async (req, res) => {
+  try {
+    const { couponCode, redeemCoins } = req.body;
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    const cart = userCarts[userId];
+    if (!cart || cart.items.length === 0) {
+      return res.status(400).json({ error: "Cart is empty" });
+    }
+
+    let discount = 0;
+    let appliedCouponCode = null;
+
+    if (couponCode && couponCode.trim() !== "") {
+      try {
+        const validation = await couponService.validateCoupon(
+          couponCode,
+          cart.subtotal,
+          userId
+        );
+        discount = Math.ceil(validation.discount);
+        appliedCouponCode = validation.code;
+      } catch (error) {
+        // Silently ignore coupon error in preview
+      }
+    }
+
+    const deliveryFee = 28;
+    const subtotalWithFee = cart.subtotal + deliveryFee;
+    const tax = Math.ceil(subtotalWithFee * 0.05);
+
+    let coinDiscount = 0;
+    let coinsRedeemed = 0;
+
+    if (redeemCoins) {
+      const coinSettings = require("../utils/coinSettings");
+      const { coinsPerRupee } = coinSettings.getCoinSettings();
+      const userCoins = user.coins || 0;
+      const blocksOf100 = Math.floor(userCoins / 100);
+      if (blocksOf100 > 0) {
+        const totalRedeemableCoins = blocksOf100 * 100;
+        const potentialDiscount = Math.ceil(totalRedeemableCoins / coinsPerRupee);
+        const remainingToPay = subtotalWithFee - discount + tax;
+        if (potentialDiscount > remainingToPay) {
+          coinDiscount = Math.ceil(remainingToPay);
+          coinsRedeemed = Math.ceil(coinDiscount * coinsPerRupee);
+        } else {
+          coinDiscount = potentialDiscount;
+          coinsRedeemed = totalRedeemableCoins;
+        }
+      }
+    }
+
+    const totalAmount = Math.ceil(Math.max(0, subtotalWithFee - discount - coinDiscount + tax));
+
+    res.json({
+      subtotal: cart.subtotal,
+      deliveryFee,
+      tax,
+      discount,
+      coinDiscount,
+      coinsRedeemed,
+      totalAmount,
+    });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -393,6 +512,13 @@ exports.cancelOrder = async (req, res) => {
     }
 
     order.status = "CANCELLED";
+    if (order.coinsRedeemed > 0) {
+      const userObj = await User.findById(order.userId);
+      if (userObj) {
+        userObj.coins = (userObj.coins || 0) + order.coinsRedeemed;
+        await userObj.save();
+      }
+    }
     await order.save();
     await orderService.notifyOrderUpdate(order);
 
@@ -623,6 +749,36 @@ exports.getApkInfo = async (req, res) => {
     } else {
       res.json({ available: false });
     }
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updateCoins = async (req, res) => {
+  try {
+    const { coinsChange } = req.body;
+    if (typeof coinsChange !== 'number') {
+      return res.status(400).json({ error: "coinsChange must be a number" });
+    }
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    user.coins = Math.max(0, (user.coins || 0) + coinsChange);
+    await user.save();
+    res.json({ coins: user.coins });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.getGameSettings = async (req, res) => {
+  try {
+    const coinSettings = require("../utils/coinSettings");
+    const settings = coinSettings.getCoinSettings();
+    res.json({
+      maxPlaysPerDay: settings.maxPlaysPerDay || 5,
+    });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

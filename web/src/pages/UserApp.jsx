@@ -58,6 +58,8 @@ import {
   updateUserProfile,
   userLogout,
   validateUserCoupon,
+  createRazorpayOrder,
+  verifyRazorpayPayment,
 } from '../api/userApi';
 import logoImage from '../assets/logo-chatora.png';
 import './UserApp.css';
@@ -177,6 +179,11 @@ export default function UserApp() {
   const [orderDetailsModalOpen, setOrderDetailsModalOpen] = useState(false);
   const [orderDetailsLoading, setOrderDetailsLoading] = useState(false);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState('COD'); // 'COD' | 'RAZORPAY'
+  const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+  const [verifyOtpCode, setVerifyOtpCode] = useState('');
+  const [verifyOtpSent, setVerifyOtpSent] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
 
   const [profileForm] = Form.useForm();
   const [addressForm] = Form.useForm();
@@ -495,11 +502,20 @@ export default function UserApp() {
     }
   };
 
+  // Load Razorpay checkout script dynamically
+  const loadRazorpayScript = () =>
+    new Promise((resolve) => {
+      if (window.Razorpay) { resolve(true); return; }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+
   const executePlaceOrder = async () => {
     const latestWindow = await checkOrderWindowStatus({ showToast: true });
-    if (latestWindow?.ordersOpen === false) {
-      return;
-    }
+    if (latestWindow?.ordersOpen === false) return;
 
     if (!selectedAddressId) {
       message.error('Please select delivery address');
@@ -507,35 +523,94 @@ export default function UserApp() {
     }
     const lat = Number(selectedAddressObj?.coordinates?.lat);
     const lng = Number(selectedAddressObj?.coordinates?.lng);
-    const hasValidLocation =
-      Number.isFinite(lat) &&
-      Number.isFinite(lng) &&
-      !(lat === 0 && lng === 0);
+    const hasValidLocation = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
     if (!hasValidLocation) {
       message.warning('Please set delivery location for selected address before checkout');
-      if (selectedAddressObj?._id) {
-        openEditAddress(selectedAddressObj);
-      }
+      if (selectedAddressObj?._id) openEditAddress(selectedAddressObj);
       return;
     }
-    if (!cart.items?.length) {
-      message.warning('Cart is empty');
-      return;
-    }
+    if (!cart.items?.length) { message.warning('Cart is empty'); return; }
 
     setCheckoutLoading(true);
     try {
-      await createUserOrder({
-        addressId: selectedAddressId,
-        paymentMethod: 'COD',
-        couponCode: appliedCoupon?.code || undefined,
-      });
-      message.success('Order placed successfully (COD)');
-      setAppliedCoupon(null);
-      setCouponCode('');
-      await Promise.all([fetchCartOnly(), fetchOrdersOnly()]);
-      setActiveTab('orders');
-      setCartDrawerOpen(false);
+      if (paymentMethod === 'RAZORPAY') {
+        // Step 1: Create food order first (backend creates it)
+        const orderRes = await createUserOrder({
+          addressId: selectedAddressId,
+          paymentMethod: 'RAZORPAY',
+          couponCode: appliedCoupon?.code || undefined,
+        });
+        const foodOrderId = orderRes.data?._id || orderRes.data?.order?._id;
+        if (!foodOrderId) throw new Error('Failed to create order');
+
+        // Step 2: Create Razorpay order via backend
+        const rzpRes = await createRazorpayOrder(foodOrderId);
+        const { razorpayOrderId, amount, currency, keyId, prefill } = rzpRes.data;
+
+        // Step 3: Load Razorpay script
+        const loaded = await loadRazorpayScript();
+        if (!loaded) { message.error('Payment gateway failed to load. Please try COD.'); return; }
+
+        // Step 4: Open Razorpay checkout
+        await new Promise((resolve, reject) => {
+          const rzp = new window.Razorpay({
+            key: keyId || import.meta.env.VITE_RAZORPAY_KEY_ID,
+            amount,
+            currency,
+            order_id: razorpayOrderId,
+            name: 'Chatora Adda',
+            description: 'Food Order Payment',
+            image: '/favicon.ico',
+            prefill: {
+              name: prefill?.name || '',
+              email: prefill?.email || '',
+              contact: prefill?.contact || '',
+            },
+            theme: { color: '#10b981' },
+            modal: {
+              ondismiss: () => {
+                message.warning('Payment cancelled. Your order is on hold.');
+                resolve();
+              },
+            },
+            handler: async (response) => {
+              try {
+                // Step 5: Verify payment signature
+                await verifyRazorpayPayment({
+                  orderId: foodOrderId,
+                  razorpayOrderId: response.razorpay_order_id,
+                  razorpayPaymentId: response.razorpay_payment_id,
+                  razorpaySignature: response.razorpay_signature,
+                });
+                message.success('✅ Payment successful! Order confirmed.');
+                setAppliedCoupon(null);
+                setCouponCode('');
+                await Promise.all([fetchCartOnly(), fetchOrdersOnly()]);
+                setActiveTab('orders');
+                setCartDrawerOpen(false);
+                resolve();
+              } catch (err) {
+                message.error(err.response?.data?.error || 'Payment verification failed');
+                reject(err);
+              }
+            },
+          });
+          rzp.open();
+        });
+      } else {
+        // COD flow
+        await createUserOrder({
+          addressId: selectedAddressId,
+          paymentMethod: 'COD',
+          couponCode: appliedCoupon?.code || undefined,
+        });
+        message.success('✅ Order placed! Payment on delivery.');
+        setAppliedCoupon(null);
+        setCouponCode('');
+        await Promise.all([fetchCartOnly(), fetchOrdersOnly()]);
+        setActiveTab('orders');
+        setCartDrawerOpen(false);
+      }
     } catch (error) {
       message.error(error.response?.data?.error || 'Failed to place order');
     } finally {
@@ -572,6 +647,10 @@ export default function UserApp() {
   };
 
   const onPlaceOrder = async () => {
+    if (profile && profile.isEmailVerified === false) {
+      message.error('Your email is unverified. Please log out and sign in using Email OTP to verify your email and place orders.');
+      return;
+    }
     if (!isProfileReadyForOrder) {
       openProfileGateModal();
       return;
@@ -600,6 +679,58 @@ export default function UserApp() {
     window.location.href = '/';
   };
 
+  const openVerificationModal = async () => {
+    setVerifyModalOpen(true);
+    if (!verifyOtpSent && profile?.email) {
+      setVerifyLoading(true);
+      try {
+        await sendUserOtp(profile.email);
+        setVerifyOtpSent(true);
+        message.success("OTP sent to your email inbox! 📧");
+      } catch (err) {
+        message.error(err.response?.data?.error || "Failed to send verification OTP");
+      } finally {
+        setVerifyLoading(false);
+      }
+    }
+  };
+
+  const handleSendVerifyOtp = async () => {
+    if (!profile?.email) return;
+    setVerifyLoading(true);
+    try {
+      await sendUserOtp(profile.email);
+      setVerifyOtpSent(true);
+      message.success("A fresh OTP has been sent! 📧");
+    } catch (err) {
+      message.error(err.response?.data?.error || "Failed to resend OTP");
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const handleConfirmVerifyOtp = async () => {
+    if (!profile?.email) return;
+    if (!verifyOtpCode || verifyOtpCode.length < 4) {
+      message.warning("Please enter the 4-digit OTP code");
+      return;
+    }
+    setVerifyLoading(true);
+    try {
+      await verifyUserOtp(profile.email, verifyOtpCode);
+      setVerifyModalOpen(false);
+      setVerifyOtpCode('');
+      setVerifyOtpSent(false);
+      message.success("✅ Email successfully verified!");
+      const p = await getUserProfile();
+      setProfile(p.data);
+    } catch (err) {
+      message.error(err.response?.data?.error || "Invalid OTP code. Please try again.");
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
   return (
     <div className="user-app-shell">
       <div className="user-app-header">
@@ -620,6 +751,15 @@ export default function UserApp() {
           <Button icon={<UserOutlined />} onClick={openProfileModal}>
             {profile?.name || 'Profile'}
           </Button>
+          {profile?.isEmailVerified ? (
+            <Tag color="success" style={{ borderRadius: 6, padding: '2px 8px', border: 'none', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 600 }}>
+              ✓ Verified
+            </Tag>
+          ) : (
+            <Tag color="error" onClick={openVerificationModal} style={{ borderRadius: 6, padding: '2px 8px', border: 'none', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 600, cursor: 'pointer' }}>
+              ⚠️ Click to Verify
+            </Tag>
+          )}
           <Badge count={cartCount}>
             <Button icon={<ShoppingCartOutlined />} onClick={() => setCartDrawerOpen(true)}>
               Cart
@@ -798,6 +938,34 @@ export default function UserApp() {
                 description={getOrderClosedToastMessage(orderWindow)}
               />
             )}
+            {profile && profile.isEmailVerified === false && (
+              <Alert
+                type="error"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message="Email Verification Required"
+                description="Your email address is currently unverified. Please log out and sign in using Email OTP to verify and place orders."
+              />
+            )}
+            {!selectedAddressId ? (
+              <Alert
+                type="warning"
+                showIcon
+                style={{ marginBottom: 12 }}
+                message="No delivery address selected"
+                description="Please select or add a delivery address below before checkout."
+              />
+            ) : (
+              selectedAddressObj && (!selectedAddressObj.coordinates || (selectedAddressObj.coordinates.lat === 0 && selectedAddressObj.coordinates.lng === 0)) && (
+                <Alert
+                  type="warning"
+                  showIcon
+                  style={{ marginBottom: 12 }}
+                  message="Address location not set"
+                  description="Please click edit on the selected address and set your location coordinates to place an order."
+                />
+              )
+            )}
             <Space style={{ marginBottom: 12 }} wrap>
               <Badge count={cartCount}>
                 <Button icon={<ShoppingCartOutlined />} onClick={() => setCartDrawerOpen(true)}>
@@ -816,8 +984,48 @@ export default function UserApp() {
             ) : (
               <>
                 <Typography.Paragraph type="secondary">
-                  Payment method on website is COD only. Select address and place order.
+                  Select your preferred payment method to proceed.
                 </Typography.Paragraph>
+
+                {/* Payment Method Selection */}
+                <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
+                  {[
+                    { key: 'COD', icon: '💵', label: 'Cash on Delivery', sub: 'Pay when delivered' },
+                    { key: 'RAZORPAY', icon: '💳', label: 'Pay Online', sub: 'Cards, UPI, Netbanking' },
+                  ].map(pm => (
+                    <button
+                      key={pm.key}
+                      type="button"
+                      onClick={() => setPaymentMethod(pm.key)}
+                      style={{
+                        flex: 1,
+                        minWidth: 140,
+                        padding: '12px 16px',
+                        border: paymentMethod === pm.key ? '2px solid #10b981' : '2px solid #e5e7eb',
+                        borderRadius: 12,
+                        background: paymentMethod === pm.key ? 'rgba(16,185,129,0.06)' : '#fff',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.15s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 10,
+                      }}
+                    >
+                      <span style={{ fontSize: 22 }}>{pm.icon}</span>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: paymentMethod === pm.key ? '#059669' : '#374151' }}>
+                          {pm.label}
+                        </div>
+                        <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 1 }}>{pm.sub}</div>
+                      </div>
+                      {paymentMethod === pm.key && (
+                        <span style={{ marginLeft: 'auto', color: '#10b981', fontSize: 16 }}>✓</span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="checkout-inline">
                   <Typography.Text strong>Select delivery address</Typography.Text>
                   <Radio.Group
@@ -864,7 +1072,10 @@ export default function UserApp() {
                   <div><span>Delivery fee:</span> <strong>₹{DELIVERY_FEE.toFixed(2)}</strong></div>
                   <div><span>Tax:</span> <strong>₹{tax.toFixed(2)}</strong></div>
                   <div><span>Discount:</span> <strong>- ₹{discount.toFixed(2)}</strong></div>
-                  <div className="checkout-total"><span>Total payable (COD):</span> <strong>₹{payable.toFixed(2)}</strong></div>
+                  <div className="checkout-total">
+                    <span>Total payable ({paymentMethod === 'COD' ? 'COD' : 'Online'}):</span>
+                    <strong>₹{payable.toFixed(2)}</strong>
+                  </div>
                 </div>
 
                 <Button
@@ -872,8 +1083,12 @@ export default function UserApp() {
                   size="large"
                   loading={checkoutLoading}
                   onClick={onPlaceOrder}
+                  style={paymentMethod === 'RAZORPAY' ? {
+                    background: 'linear-gradient(135deg,#10b981,#059669)',
+                    border: 'none',
+                  } : {}}
                 >
-                  Place Order (COD)
+                  {paymentMethod === 'RAZORPAY' ? '💳 Pay ₹' + payable.toFixed(0) + ' Online' : '✅ Place Order (COD)'}
                 </Button>
               </>
             )}
@@ -930,6 +1145,17 @@ export default function UserApp() {
                         {profile?.name || '-'}
                       </Typography.Title>
                       <Typography.Text type="secondary">{profile?.email || '-'}</Typography.Text>
+                      <div style={{ marginTop: 6 }}>
+                        {profile?.isEmailVerified ? (
+                          <Tag color="success" style={{ border: 'none', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 600, borderRadius: 6 }}>
+                            ✓ Verified Account
+                          </Tag>
+                        ) : (
+                          <Tag color="error" onClick={openVerificationModal} style={{ border: 'none', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 600, borderRadius: 6, cursor: 'pointer' }}>
+                            ⚠️ Click to Verify Email
+                          </Tag>
+                        )}
+                      </div>
                     </div>
                   </Space>
                   <div>
@@ -1128,6 +1354,17 @@ export default function UserApp() {
           <Form.Item name="email" label="Email">
             <Input disabled />
           </Form.Item>
+          <Form.Item label="Email Verification Status">
+            {profile?.isEmailVerified ? (
+              <Tag color="success" style={{ border: 'none', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 600, borderRadius: 6 }}>
+                ✓ Verified Account
+              </Tag>
+            ) : (
+              <Tag color="error" onClick={() => { setProfileModalOpen(false); openVerificationModal(); }} style={{ border: 'none', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 600, borderRadius: 6, cursor: 'pointer' }}>
+                ⚠️ Click to Verify Email
+              </Tag>
+            )}
+          </Form.Item>
           <Form.Item
             name="phone"
             label="WhatsApp number"
@@ -1259,6 +1496,42 @@ export default function UserApp() {
           </Space>
         </Form>
       </Drawer>
+
+      <Modal
+        title="Verify Your Email"
+        open={verifyModalOpen}
+        onCancel={() => setVerifyModalOpen(false)}
+        footer={null}
+        destroyOnClose={false}
+      >
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+          We have sent a 4-digit verification OTP to your email address: <strong>{profile?.email}</strong>.
+          The OTP remains active for 30 minutes. You can close this popup and use the same OTP to verify later.
+        </Typography.Paragraph>
+        <Space direction="vertical" style={{ width: '100%' }} size="middle">
+          <Input
+            placeholder="Enter 4-digit OTP"
+            maxLength={4}
+            value={verifyOtpCode}
+            onChange={(e) => setVerifyOtpCode(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            style={{ fontSize: 18, textAlign: 'center', letterSpacing: 4, height: 44 }}
+            autoFocus
+          />
+          <Space style={{ width: '100%', justifyContent: 'space-between' }}>
+            <Button onClick={handleSendVerifyOtp} loading={verifyLoading}>
+              Resend OTP
+            </Button>
+            <Button
+              type="primary"
+              onClick={handleConfirmVerifyOtp}
+              loading={verifyLoading}
+              disabled={verifyOtpCode.length < 4}
+            >
+              Verify OTP
+            </Button>
+          </Space>
+        </Space>
+      </Modal>
     </div>
   );
 }

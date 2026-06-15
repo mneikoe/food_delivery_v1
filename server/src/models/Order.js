@@ -48,6 +48,14 @@ const orderSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  coinDiscount: {
+    type: Number,
+    default: 0,
+  },
+  coinsRedeemed: {
+    type: Number,
+    default: 0,
+  },
   couponCode: String,
   totalAmount: {
     type: Number,
@@ -56,8 +64,20 @@ const orderSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ["COD"],
+    enum: ["COD", "RAZORPAY"],
     default: "COD",
+  },
+  paymentStatus: {
+    type: String,
+    enum: ["PENDING", "PAID", "FAILED", "REFUNDED", "NA"],
+    default: "NA", // NA = COD (no online payment)
+  },
+  // Razorpay specific fields
+  razorpayOrderId: {
+    type: String,
+  },
+  razorpayPaymentId: {
+    type: String,
   },
   status: {
     type: String,
@@ -85,6 +105,15 @@ const orderSchema = new mongoose.Schema({
   },
   estimatedDeliveryTime: Date,
   actualDeliveryTime: Date,
+  paymentLockUntil: {
+    type: Date,
+  },
+  paymentInitiatedAt: {
+    type: Date,
+  },
+  paymentCompletedAt: {
+    type: Date,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -106,5 +135,11 @@ orderSchema.pre("save", function (next) {
   next();
 });
 
+// Indexes
+orderSchema.index({ userId: 1 });
+orderSchema.index({ razorpayOrderId: 1 });
+orderSchema.index({ paymentStatus: 1 });
+orderSchema.index({ status: 1 });
+orderSchema.index({ userId: 1, createdAt: -1 });
 
 module.exports = mongoose.model("Order", orderSchema);

@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Card, Upload, Button, message, Typography, Space, Divider, Input, Switch, Row, Col } from 'antd';
-import { UploadOutlined, AndroidOutlined, DeleteOutlined, ClockCircleOutlined, PictureOutlined, SaveOutlined } from '@ant-design/icons';
-import { uploadApkInfo, getApkInfo, deleteApkInfo, getOrderWindow, updateOrderWindow, getHeroSlides, updateHeroSlides, uploadHeroImage } from '../api/adminApi';
+import { Card, Upload, Button, message, Typography, Space, Divider, Input, Switch, Row, Col, Tabs, Table, Modal, Form, InputNumber, Select, Tag } from 'antd';
+import { UploadOutlined, AndroidOutlined, DeleteOutlined, ClockCircleOutlined, PictureOutlined, SaveOutlined, PlusOutlined, EditOutlined, HistoryOutlined, SettingOutlined, TrophyOutlined, GiftOutlined } from '@ant-design/icons';
+import { 
+  uploadApkInfo, getApkInfo, deleteApkInfo, getOrderWindow, updateOrderWindow, 
+  getHeroSlides, updateHeroSlides, uploadHeroImage, getCoinSettings, updateCoinSettings,
+  getGamificationSettings, updateGamificationSettings, getRewardTiers, createRewardTier, 
+  updateRewardTier, deleteRewardTier, getMissions, createMission, updateMission, 
+  deleteMission, getCoinTransactions
+} from '../api/adminApi';
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -28,11 +34,125 @@ export default function AppSettings() {
   const [heroSlidesSaving, setHeroSlidesSaving] = useState(false);
   const [heroUploadingIndex, setHeroUploadingIndex] = useState(null);
 
+  const [coinsPerRupee, setCoinsPerRupee] = useState(10);
+  const [maxPlaysPerDay, setMaxPlaysPerDay] = useState(5);
+  const [coinsSaving, setCoinsSaving] = useState(false);
+
+  // Gamification States
+  const [gamificationSettings, setGamificationSettings] = useState(null);
+  const [rewardTiersList, setRewardTiersList] = useState([]);
+  const [missionsList, setMissionsList] = useState([]);
+  const [transactionsLedger, setTransactionsLedger] = useState([]);
+  const [loadingGamification, setLoadingGamification] = useState(false);
+  const [savingGamification, setSavingGamification] = useState(false);
+
+  // Modals state
+  const [rewardModalVisible, setRewardModalVisible] = useState(false);
+  const [editingReward, setEditingReward] = useState(null);
+  const [rewardForm] = Form.useForm();
+
+  const [missionModalVisible, setMissionModalVisible] = useState(false);
+  const [editingMission, setEditingMission] = useState(null);
+  const [missionForm] = Form.useForm();
+
   useEffect(() => {
     fetchApkInfo();
     fetchOrderWindow();
     fetchHeroSlides();
+    fetchCoinSettings();
+    fetchGamificationData();
   }, []);
+
+  const fetchGamificationData = async () => {
+    setLoadingGamification(true);
+    try {
+      const settingsRes = await getGamificationSettings();
+      setGamificationSettings(settingsRes.data);
+      
+      const tiersRes = await getRewardTiers();
+      setRewardTiersList(tiersRes.data);
+      
+      const missionsRes = await getMissions();
+      setMissionsList(missionsRes.data);
+      
+      const transactionsRes = await getCoinTransactions();
+      setTransactionsLedger(transactionsRes.data);
+    } catch (e) {
+      console.error('Failed to load gamification admin dashboard details:', e);
+    } finally {
+      setLoadingGamification(false);
+    }
+  };
+
+  // Gamification Administrative Handlers
+  const handleGamificationSettingsSave = async (values) => {
+    setSavingGamification(true);
+    try {
+      await updateGamificationSettings(values);
+      message.success('Game Economy Settings updated successfully!');
+      fetchGamificationData();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to update game economy settings');
+    } finally {
+      setSavingGamification(false);
+    }
+  };
+
+  const handleRewardTierSave = async (values) => {
+    try {
+      if (editingReward) {
+        await updateRewardTier(editingReward._id, values);
+        message.success('Reward Tier updated successfully');
+      } else {
+        await createRewardTier(values);
+        message.success('Reward Tier created successfully');
+      }
+      setRewardModalVisible(false);
+      setEditingReward(null);
+      rewardForm.resetFields();
+      fetchGamificationData();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to save Reward Tier');
+    }
+  };
+
+  const handleRewardTierDelete = async (id) => {
+    try {
+      await deleteRewardTier(id);
+      message.success('Reward Tier deleted');
+      fetchGamificationData();
+    } catch (e) {
+      message.error('Failed to delete Reward Tier');
+    }
+  };
+
+  const handleMissionSave = async (values) => {
+    try {
+      if (editingMission) {
+        await updateMission(editingMission._id, values);
+        message.success('Mission template updated');
+      } else {
+        await createMission(values);
+        message.success('Mission template created');
+      }
+      setMissionModalVisible(false);
+      setEditingMission(null);
+      missionForm.resetFields();
+      fetchGamificationData();
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to save mission');
+    }
+  };
+
+  const handleMissionDelete = async (id) => {
+    try {
+      await deleteMission(id);
+      message.success('Mission template deleted');
+      fetchGamificationData();
+    } catch (e) {
+      message.error('Failed to delete mission template');
+    }
+  };
 
   const fetchHeroSlides = async () => {
     try {
@@ -101,6 +221,33 @@ export default function AppSettings() {
       setOrdersOpen(d.ordersOpen);
     } catch (e) {
       console.error('Failed to fetch order window:', e);
+    }
+  };
+
+  const fetchCoinSettings = async () => {
+    try {
+      const res = await getCoinSettings();
+      if (res.data) {
+        if (res.data.coinsPerRupee) setCoinsPerRupee(res.data.coinsPerRupee);
+        if (res.data.maxPlaysPerDay) setMaxPlaysPerDay(res.data.maxPlaysPerDay);
+      }
+    } catch (e) {
+      console.error('Failed to fetch coin settings:', e);
+    }
+  };
+
+  const handleCoinSettingsSave = async () => {
+    setCoinsSaving(true);
+    try {
+      await updateCoinSettings({
+        coinsPerRupee: Number(coinsPerRupee),
+        maxPlaysPerDay: Number(maxPlaysPerDay),
+      });
+      message.success('Coin and Game settings updated successfully!');
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to update coin settings');
+    } finally {
+      setCoinsSaving(false);
     }
   };
 
@@ -406,6 +553,284 @@ export default function AppSettings() {
           </div>
         </Space>
       </Card>
+
+      <Card
+        title={
+          <Space>
+            <TrophyOutlined style={{ fontSize: 22, color: '#f5222d' }} />
+            <span style={{ fontSize: 20 }}>Gamification & Retention Dashboard</span>
+          </Space>
+        }
+        style={{ marginBottom: 24 }}
+        styles={{ body: { paddingTop: 8 } }}
+        loading={loadingGamification}
+      >
+        <Tabs defaultActiveKey="1" items={[
+          {
+            key: '1',
+            label: <span><SettingOutlined />Economy Settings</span>,
+            children: (
+              <Form
+                layout="vertical"
+                initialValues={gamificationSettings || {}}
+                onFinish={handleGamificationSettingsSave}
+                style={{ marginTop: 16 }}
+              >
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item label="Max Plays Per Day (Server Authoritative)" name="maxDailyPlays" required>
+                      <InputNumber min={1} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item label="Coins Per Catch/Treat" name="coinsPerTreat" required>
+                      <InputNumber min={1} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item label="Golden Bone Spawn Chance (0.0 to 1.0)" name="goldenBoneSpawnChance" required>
+                      <InputNumber min={0} max={1} step={0.01} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item label="Golden Bone Reward Coins" name="goldenBoneReward" required>
+                      <InputNumber min={1} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item label="Daily Free Check-In Coins" name="dailyRewardAmount" required>
+                      <InputNumber min={1} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                  <Col span={12}>
+                    <Form.Item label="Weekly Coin Redemption Limit" name="weeklyCoinRedemptionLimit" required>
+                      <InputNumber min={1} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Item label="Max Coins Reward Per Game Session" name="maxCoinsPerGame" required>
+                      <InputNumber min={10} style={{ width: '100%' }} />
+                    </Form.Item>
+                  </Col>
+                </Row>
+                <Form.Item label="Gamification System Active" name="isActive" valuePropName="checked">
+                  <Switch />
+                </Form.Item>
+                <Form.Item>
+                  <Button type="primary" htmlType="submit" loading={savingGamification} icon={<SaveOutlined />}>
+                    Save Settings
+                  </Button>
+                </Form.Item>
+              </Form>
+            )
+          },
+          {
+            key: '2',
+            label: <span><GiftOutlined />Reward Tiers (Coupons)</span>,
+            children: (
+              <div style={{ marginTop: 16 }}>
+                <Button 
+                  type="primary" 
+                  icon={<PlusOutlined />} 
+                  onClick={() => { setEditingReward(null); rewardForm.resetFields(); setRewardModalVisible(true); }}
+                  style={{ marginBottom: 16 }}
+                >
+                  Add Reward Tier
+                </Button>
+                <Table 
+                  dataSource={rewardTiersList} 
+                  rowKey="_id"
+                  columns={[
+                    { title: 'Title', dataIndex: 'title', key: 'title' },
+                    { title: 'Coins Required', dataIndex: 'coinsRequired', key: 'coinsRequired', render: val => `🪙 ${val}` },
+                    { title: 'Coupon Value', dataIndex: 'couponValue', key: 'couponValue', render: val => `₹${val}` },
+                    { title: 'Weekly Limit', dataIndex: 'weeklyLimit', key: 'weeklyLimit' },
+                    { title: 'Monthly Limit', dataIndex: 'monthlyLimit', key: 'monthlyLimit' },
+                    { title: 'Active', dataIndex: 'isActive', key: 'isActive', render: val => val ? <Tag color="green">Active</Tag> : <Tag color="red">Inactive</Tag> },
+                    {
+                      title: 'Actions',
+                      key: 'actions',
+                      render: (_, record) => (
+                        <Space>
+                          <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingReward(record); rewardForm.setFieldsValue(record); setRewardModalVisible(true); }} />
+                          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleRewardTierDelete(record._id)} />
+                        </Space>
+                      )
+                    }
+                  ]} 
+                />
+              </div>
+            )
+          },
+          {
+            key: '3',
+            label: <span><TrophyOutlined />Daily Missions</span>,
+            children: (
+              <div style={{ marginTop: 16 }}>
+                <Button 
+                  type="primary" 
+                  icon={<PlusOutlined />} 
+                  onClick={() => { setEditingMission(null); missionForm.resetFields(); setMissionModalVisible(true); }}
+                  style={{ marginBottom: 16 }}
+                >
+                  Add Mission Blueprints
+                </Button>
+                <Table 
+                  dataSource={missionsList} 
+                  rowKey="_id"
+                  columns={[
+                    { title: 'Mission Name', dataIndex: 'name', key: 'name' },
+                    { title: 'Type', dataIndex: 'type', key: 'type', render: val => <Tag color="blue">{val}</Tag> },
+                    { title: 'Difficulty', dataIndex: 'difficulty', key: 'difficulty', render: val => <Tag color={val === 'EASY' ? 'green' : val === 'MEDIUM' ? 'orange' : 'red'}>{val}</Tag> },
+                    { title: 'Target', dataIndex: 'target', key: 'target' },
+                    { title: 'Coins Reward', dataIndex: 'rewardCoins', key: 'rewardCoins', render: val => `🪙 ${val}` },
+                    { title: 'Active', dataIndex: 'isActive', key: 'isActive', render: val => val ? <Tag color="green">Active</Tag> : <Tag color="red">Inactive</Tag> },
+                    {
+                      title: 'Actions',
+                      key: 'actions',
+                      render: (_, record) => (
+                        <Space>
+                          <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingMission(record); missionForm.setFieldsValue(record); setMissionModalVisible(true); }} />
+                          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleMissionDelete(record._id)} />
+                        </Space>
+                      )
+                    }
+                  ]} 
+                />
+              </div>
+            )
+          },
+          {
+            key: '4',
+            label: <span><HistoryOutlined />Accounting Ledger</span>,
+            children: (
+              <div style={{ marginTop: 16 }}>
+                <Table 
+                  dataSource={transactionsLedger} 
+                  rowKey="_id"
+                  columns={[
+                    { title: 'User', dataIndex: 'userId', key: 'user', render: user => user ? `${user.name} (${user.email})` : 'N/A' },
+                    { 
+                      title: 'Type', 
+                      dataIndex: 'type', 
+                      key: 'type', 
+                      render: type => {
+                        const colors = {
+                          GAME_REWARD: 'blue',
+                          MISSION_REWARD: 'green',
+                          STREAK_REWARD: 'orange',
+                          DAILY_REWARD: 'purple',
+                          COUPON_REDEMPTION: 'red',
+                          ADMIN_ADJUSTMENT: 'magenta'
+                        };
+                        return <Tag color={colors[type] || 'default'}>{type}</Tag>;
+                      } 
+                    },
+                    { 
+                      title: 'Coins', 
+                      dataIndex: 'coins', 
+                      key: 'coins', 
+                      render: coins => (
+                        <span style={{ color: coins >= 0 ? '#52c41a' : '#f5222d', fontWeight: 'bold' }}>
+                          {coins >= 0 ? `+${coins}` : coins}
+                        </span>
+                      )
+                    },
+                    { title: 'Source Description', dataIndex: 'source', key: 'source' },
+                    { title: 'Timestamp', dataIndex: 'createdAt', key: 'timestamp', render: date => new Date(date).toLocaleString() }
+                  ]}
+                />
+              </div>
+            )
+          }
+        ]} />
+      </Card>
+
+      {/* Add/Edit Reward Tier Modal */}
+      <Modal
+        title={editingReward ? "Edit Reward Tier" : "Add Reward Tier"}
+        open={rewardModalVisible}
+        onCancel={() => { setRewardModalVisible(false); setEditingReward(null); }}
+        footer={null}
+      >
+        <Form form={rewardForm} layout="vertical" onFinish={handleRewardTierSave}>
+          <Form.Item label="Reward Title" name="title" required rules={[{ required: true, message: 'Title is required' }]}>
+            <Input placeholder="e.g. ₹10 Off Coupon" />
+          </Form.Item>
+          <Form.Item label="Coins Required" name="coinsRequired" required rules={[{ required: true }]}>
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="Coupon Value (₹)" name="couponValue" required rules={[{ required: true }]}>
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="Weekly User Limit" name="weeklyLimit" required rules={[{ required: true }]}>
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="Monthly User Limit" name="monthlyLimit" required rules={[{ required: true }]}>
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="Active Status" name="isActive" valuePropName="checked" initialValue={true}>
+            <Switch />
+          </Form.Item>
+          <Form.Item label="Sort Order" name="sortOrder" initialValue={0}>
+            <InputNumber style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit">
+              Save Reward Tier
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      {/* Add/Edit Mission Modal */}
+      <Modal
+        title={editingMission ? "Edit Mission Template" : "Add Mission Template"}
+        open={missionModalVisible}
+        onCancel={() => { setMissionModalVisible(false); setEditingMission(null); }}
+        footer={null}
+      >
+        <Form form={missionForm} layout="vertical" onFinish={handleMissionSave}>
+          <Form.Item label="Mission Description/Name" name="name" required rules={[{ required: true, message: 'Description is required' }]}>
+            <Input placeholder="e.g. Catch 8 treats in a single game" />
+          </Form.Item>
+          <Form.Item label="Mission Type" name="type" required rules={[{ required: true }]}>
+            <Select options={[
+              { value: 'PLAY_GAME', label: 'Play Game counts' },
+              { value: 'SCORE_TARGET', label: 'Target High Score' },
+              { value: 'COLLECT_GOLDEN_BONE', label: 'Catch Golden Bones' },
+              { value: 'COMBO_TARGET', label: 'Achieve Combos' }
+            ]} />
+          </Form.Item>
+          <Form.Item label="Difficulty" name="difficulty" required rules={[{ required: true }]}>
+            <Select options={[
+              { value: 'EASY', label: 'Easy' },
+              { value: 'MEDIUM', label: 'Medium' },
+              { value: 'HARD', label: 'Hard' }
+            ]} />
+          </Form.Item>
+          <Form.Item label="Target Amount/Value" name="target" required rules={[{ required: true }]}>
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="Reward Coins" name="rewardCoins" required rules={[{ required: true }]}>
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item label="Active Status" name="isActive" valuePropName="checked" initialValue={true}>
+            <Switch />
+          </Form.Item>
+          <Form.Item>
+            <Button type="primary" htmlType="submit">
+              Save Mission Template
+            </Button>
+          </Form.Item>
+        </Form>
+      </Modal>
 
       <Card
         title={

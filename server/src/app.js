@@ -1,7 +1,8 @@
 const express = require("express");
 const path = require("path");
 const cors = require("cors");
-//const helmet = require("helmet");
+const helmet = require("helmet");
+const mongoSanitize = require("express-mongo-sanitize");
 const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 
@@ -13,6 +14,8 @@ const authRoutes = require("./routes/authRoutes");
 const userRoutes = require("./routes/userRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const deliveryRoutes = require("./routes/deliveryRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");
+const pushRoutes = require("./routes/pushRoutes");
 const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
@@ -20,8 +23,11 @@ const app = express();
 // Trust proxy - when behind any reverse proxy (Nginx, platform proxy, etc.)
 app.set('trust proxy', 1);
 
+const observability = require("./middleware/observability");
+app.use(observability);
+
 // Security middleware
-//app.use(helmet());
+app.use(helmet({ contentSecurityPolicy: false })); // Disable CSP to avoid blocking local assets if any
 app.use(cors());
 
 // APK upload BEFORE express.json() so large multipart body is never parsed as JSON (fixes 502)
@@ -39,6 +45,7 @@ app.post(
 );
 
 app.use(express.json());
+app.use(mongoSanitize());
 
 // Rate limiting - Configured for proxy environment
 const limiter = rateLimit({
@@ -113,18 +120,33 @@ app.get("/api/public/hero-slides", (req, res) => {
   }
 });
 
+// Swagger API Documentation Setup
+const setupSwagger = require("./config/swagger");
+setupSwagger(app);
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/delivery", deliveryRoutes);
+app.use("/api/payment", paymentRoutes);
+app.use("/api/push", pushRoutes);
 
 // Health check
 app.get("/health", (req, res) => {
+  const mongoose = require("mongoose");
+  const packageJson = require("../package.json");
+  const dbStatus = mongoose.connection.readyState === 1 ? "connected" : "disconnected";
+  
   res.json({
-    status: "OK",
+    status: "ok",
+    database: dbStatus,
+    uptime: `${process.uptime().toFixed(2)}s`,
     timestamp: new Date().toISOString(),
-    message: " food delivery v1 app webServer is running",
+    memoryUsage: process.memoryUsage(),
+    nodeVersion: process.version,
+    version: packageJson.version || "1.0.0",
+    environment: process.env.NODE_ENV || "development"
   });
 });
 

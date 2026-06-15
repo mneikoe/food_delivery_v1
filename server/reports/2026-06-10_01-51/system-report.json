@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-06-09T20:22:05.900Z",
+  "coveragePercent": 54,
+  "securityIssuesCount": 0,
+  "loadTestMetrics": {
+    "avgLatency": "43ms",
+    "p95": "97.4ms"
+  },
+  "health": {
+    "timestamp": "2026-06-09T20:22:05.871Z",
+    "status": "ok",
+    "database": "connected",
+    "nodeVersion": "v24.16.0",
+    "version": "1.0.0",
+    "environment": "development"
+  }
+}

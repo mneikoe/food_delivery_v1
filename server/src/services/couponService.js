@@ -2,19 +2,6 @@ const Coupon = require("../models/Coupon");
 
 class CouponService {
   async validateCoupon(code, orderAmount, userId = null) {
-    // Check if user has already placed an order (coupons only for first order)
-    if (userId) {
-      const Order = require("../models/Order");
-      const orderCount = await Order.countDocuments({ 
-        userId, 
-        status: { $nin: ['CANCELLED'] } 
-      });
-      
-      if (orderCount > 0) {
-        throw new Error("Coupons are only valid for your first order");
-      }
-    }
-    
     const coupon = await Coupon.findOne({
       code: code.toUpperCase(),
       isActive: true,
@@ -24,6 +11,19 @@ class CouponService {
 
     if (!coupon) {
       throw new Error("Invalid or expired coupon");
+    }
+
+    // Check if user has already placed an order (only for non-game reward coupons)
+    if (userId && !coupon.isGameReward) {
+      const Order = require("../models/Order");
+      const orderCount = await Order.countDocuments({ 
+        userId, 
+        status: { $nin: ['CANCELLED'] } 
+      });
+      
+      if (orderCount > 0) {
+        throw new Error("Coupons are only valid for your first order");
+      }
     }
 
     if (orderAmount < coupon.minOrderValue) {

@@ -19,6 +19,7 @@ import Coupons from './pages/Coupons';
 import Offers from './pages/Offers';
 import Orders from './pages/Orders';
 import DeliveryPartners from './pages/DeliveryPartners';
+import PushManager from './pages/PushManager';
 import AppSettings from './pages/AppSettings';
 import PrivacyPolicy from './pages/PrivacyPolicy';
 import UserProtectedRoute from './components/UserProtectedRoute';
@@ -125,6 +126,7 @@ function App() {
                         <Route path="/offers" element={<Offers />} />
                         <Route path="/orders" element={<Orders />} />
                         <Route path="/delivery-partners" element={<DeliveryPartners />} />
+                        <Route path="/push-manager" element={<PushManager />} />
                         <Route path="/app-settings" element={<AppSettings />} />
                         <Route path="*" element={<Navigate to="/admin" replace />} />
                       </Routes>

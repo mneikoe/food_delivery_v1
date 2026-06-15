@@ -43,6 +43,10 @@ const couponSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  isGameReward: {
+    type: Boolean,
+    default: false,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

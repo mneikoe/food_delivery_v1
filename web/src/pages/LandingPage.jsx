@@ -1,423 +1,436 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Badge, Button, Card, Col, Drawer, Empty, Row, Space, Tag, Typography, message } from 'antd';
-import {
-  AppstoreOutlined,
-  AndroidOutlined,
-  AppleOutlined,
-  ArrowRightOutlined,
-  ClockCircleOutlined,
-  CheckCircleOutlined,
-  LoginOutlined,
-  MenuOutlined,
-  RocketOutlined,
-  SafetyCertificateOutlined,
-  ShoppingCartOutlined,
-  UnorderedListOutlined,
-} from '@ant-design/icons';
+import { message } from 'antd';
 import { addUserCartItem, getUserCart, getUserCategories, getUserProducts } from '../api/userApi';
 import logoImage from '../assets/logo-chatora.png';
 import './LandingPage.css';
 
-const FALLBACK_FOOD_IMAGE =
-  'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=1600&auto=format&fit=crop';
+const FALLBACK = 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=800&auto=format&fit=crop';
 
 export default function LandingPage() {
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState(null);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [selectedCat, setSelectedCat] = useState(null);
+  const [cartMap, setCartMap] = useState({});
   const [cartCount, setCartCount] = useState(0);
-  const [cartQtyMap, setCartQtyMap] = useState({});
-  const userToken = localStorage.getItem('user_token');
-  const isLoggedIn = Boolean(userToken);
-
-  const syncCartState = (cartData) => {
-    const items = cartData?.items || [];
-    setCartCount(items.reduce((sum, item) => sum + (item.quantity || 0), 0));
-    const nextMap = {};
-    items.forEach((item) => {
-      const key = item?.productId?._id || item?.productId || item?._id;
-      if (!key) return;
-      nextMap[key] = (nextMap[key] || 0) + (item.quantity || 0);
-    });
-    setCartQtyMap(nextMap);
-  };
+  const [loading, setLoading] = useState(false);
+  const [mobileMenu, setMobileMenu] = useState(false);
+  const [addingId, setAddingId] = useState(null);
+  const isLoggedIn = Boolean(localStorage.getItem('user_token'));
 
   useEffect(() => {
-    if (!isLoggedIn) return;
-    const loadMenu = async () => {
-      setLoading(true);
-      try {
-        const [catRes, productRes, cartRes] = await Promise.all([
-          getUserCategories(),
-          getUserProducts(),
-          getUserCart(),
-        ]);
-        const catData = catRes.data || [];
-        setCategories(catData);
-        setProducts(productRes.data || []);
-        syncCartState(cartRes.data || {});
-        if (catData.length) {
-          setSelectedCategory(catData[0]._id);
-        }
-      } catch (error) {
-        message.error(error.response?.data?.error || 'Unable to load menu');
-      } finally {
-        setLoading(false);
-      }
-    };
     loadMenu();
-  }, [isLoggedIn]);
+    // eslint-disable-next-line
+  }, []);
 
-  const selectedFoods = useMemo(() => {
-    if (!selectedCategory) return products.slice(0, 12);
-    return products.filter((p) => p.categoryId?._id === selectedCategory);
-  }, [products, selectedCategory]);
+  const loadMenu = async () => {
+    setLoading(true);
+    try {
+      const [catRes, prodRes] = await Promise.all([getUserCategories(), getUserProducts()]);
+      const cats = catRes.data || [];
+      setCategories(cats);
+      setProducts(prodRes.data || []);
+      if (cats.length) setSelectedCat(cats[0]._id);
+      if (isLoggedIn) {
+        const cartRes = await getUserCart();
+        syncCart(cartRes.data);
+      }
+    } catch (_) {}
+    finally { setLoading(false); }
+  };
 
-  const onAddToCart = async (productId) => {
+  const syncCart = (cartData) => {
+    const items = cartData?.items || [];
+    setCartCount(items.reduce((s, i) => s + (i.quantity || 0), 0));
+    const m = {};
+    items.forEach(i => {
+      const k = i?.productId?._id || i?.productId || i?._id;
+      if (k) m[k] = (m[k] || 0) + (i.quantity || 0);
+    });
+    setCartMap(m);
+  };
+
+  const filtered = useMemo(() =>
+    selectedCat ? products.filter(p => p.categoryId?._id === selectedCat) : products.slice(0, 12),
+    [products, selectedCat]
+  );
+
+  const handleAddToCart = async (productId) => {
     if (!isLoggedIn) {
-      message.info('Please login first to add items in cart');
       navigate('/user/login');
       return;
     }
+    setAddingId(productId);
     try {
       await addUserCartItem({ productId, quantity: 1 });
-      setCartCount((prev) => prev + 1);
-      setCartQtyMap((prev) => ({ ...prev, [productId]: (prev[productId] || 0) + 1 }));
-      message.success('Added to cart');
-    } catch (error) {
-      message.error(error.response?.data?.error || 'Unable to add to cart');
-    }
+      setCartCount(p => p + 1);
+      setCartMap(p => ({ ...p, [productId]: (p[productId] || 0) + 1 }));
+      message.success('Added to cart! 🛒');
+    } catch (e) {
+      message.error(e.response?.data?.error || 'Failed to add');
+    } finally { setAddingId(null); }
   };
 
   return (
-    <div className="landing-v2">
-      <header className="landing-header">
-        <div className="landing-header-inner">
-          <div className="brand-block" onClick={() => navigate('/')}>
-            <img src={logoImage} alt="Chatora Adda Logo" className="brand-logo-image" />
-            <div className="brand-copy">
-              <h1>Chatora Adda</h1>
-              <p>Night Online Cafe</p>
+    <div className="lp-root">
+      {/* NAVBAR */}
+      <nav className="lp-nav">
+        <div className="lp-nav-inner">
+          <div className="lp-brand" onClick={() => navigate('/')}>
+            <img src={logoImage} alt="Chatora Adda" className="lp-brand-logo" />
+            <div>
+              <div className="lp-brand-name">Chatora Adda</div>
+              <div className="lp-brand-tag">Night Online Cafe</div>
             </div>
           </div>
-          <Space wrap className="landing-header-actions">
-            <Button onClick={() => navigate('/privacypolicy')}>Privacy</Button>
+
+          {/* Desktop nav links */}
+          <div className="lp-nav-links">
+            <a href="#menu" className="lp-nav-link">Menu</a>
+            <a href="#features" className="lp-nav-link">Why Us</a>
+            <a href="#app" className="lp-nav-link">App</a>
+            <button className="lp-btn-outline" onClick={() => navigate('/privacypolicy')}>Privacy</button>
             {isLoggedIn ? (
-              <Button type="primary" onClick={() => navigate('/user/app')}>
-                User App
-              </Button>
+              <button className="lp-btn-primary" onClick={() => navigate('/user/app')}>
+                🍽️ My Orders
+              </button>
             ) : (
-              <Button icon={<LoginOutlined />} type="primary" onClick={() => navigate('/user/login')}>
-                Login to Order
-              </Button>
-            )}
-          </Space>
-          <Button
-            className="landing-menu-toggle"
-            icon={<MenuOutlined />}
-            onClick={() => setMobileMenuOpen(true)}
-          />
-        </div>
-      </header>
-
-      <Drawer
-        title="Menu"
-        placement="right"
-        open={mobileMenuOpen}
-        onClose={() => setMobileMenuOpen(false)}
-        className="landing-mobile-drawer"
-      >
-        <Space direction="vertical" style={{ width: '100%' }} size="middle">
-          <Button block onClick={() => { navigate('/'); setMobileMenuOpen(false); }}>
-            Home
-          </Button>
-          <Button block onClick={() => { navigate('/privacypolicy'); setMobileMenuOpen(false); }}>
-            Privacy
-          </Button>
-          {isLoggedIn ? (
-            <Button type="primary" block onClick={() => { navigate('/user/app'); setMobileMenuOpen(false); }}>
-              User App
-            </Button>
-          ) : (
-            <Button type="primary" icon={<LoginOutlined />} block onClick={() => { navigate('/user/login'); setMobileMenuOpen(false); }}>
-              Login to Order
-            </Button>
-          )}
-        </Space>
-      </Drawer>
-
-      <section className="hero-v2">
-        <div className="hero-copy">
-          <Tag color="green">Now serving on web</Tag>
-          <h2>Discover tasty food, explore categories, order in minutes.</h2>
-          <p>
-            You can browse from home page freely. To place order and manage cart, login is required.
-          </p>
-          <Space wrap>
-            <Button
-              type="primary"
-              size="large"
-              icon={<ArrowRightOutlined />}
-              onClick={() => navigate(isLoggedIn ? '/user/app' : '/user/login')}
-            >
-              {isLoggedIn ? 'Start Ordering' : 'Login & Order'}
-            </Button>
-            <Button size="large" onClick={() => navigate(isLoggedIn ? '/user/items' : '/user/login')}>
-              Explore Full Menu
-            </Button>
-          </Space>
-        </div>
-        <div className="hero-static-image">
-          <img
-            src={FALLBACK_FOOD_IMAGE}
-            alt="Delicious food"
-          />
-        </div>
-      </section>
-
-      <section className="menu-section-v2">
-        <div className="section-head">
-          <h3>Categories</h3>
-          <p>Select a category and see matching items below.</p>
-        </div>
-
-        {!isLoggedIn ? (
-          <Card className="login-required-card">
-            <Typography.Title level={5}>Menu preview requires user login</Typography.Title>
-            <Typography.Paragraph type="secondary">
-              Backend serves menu data through secure user APIs. Login once to view real live menu and order.
-            </Typography.Paragraph>
-            <Button type="primary" onClick={() => navigate('/user/login')}>
-              Login to View Menu
-            </Button>
-          </Card>
-        ) : (
-          <>
-            <div className="landing-menu-links">
-              <Button
-                icon={<AppstoreOutlined />}
-                onClick={() => navigate('/user/categories')}
-              >
-                View Full Categories
-              </Button>
-              <Button
-                icon={<UnorderedListOutlined />}
-                onClick={() => navigate('/user/items')}
-              >
-                View Full Menu
-              </Button>
-            </div>
-            <div className="h-scroll-chips">
-              {categories.map((cat) => (
-                <button
-                  key={cat._id}
-                  type="button"
-                  className={`chip-btn ${selectedCategory === cat._id ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(cat._id)}
-                >
-                  <span className="chip-media" aria-hidden="true">
-                    {cat.image ? (
-                      <img src={cat.image} alt={cat.name} className="chip-image" />
-                    ) : (
-                      <span className="chip-fallback">{(cat.name || 'C').slice(0, 1).toUpperCase()}</span>
-                    )}
-                  </span>
-                  <span>{cat.name}</span>
+              <>
+                <button className="lp-btn-ghost" onClick={() => navigate('/user/login')}>Sign In</button>
+                <button className="lp-btn-primary" onClick={() => navigate('/user/login')}>
+                  Get Started →
                 </button>
+              </>
+            )}
+            {cartCount > 0 && (
+              <button className="lp-cart-pill" onClick={() => navigate('/user/app')}>
+                🛒 {cartCount}
+              </button>
+            )}
+          </div>
+
+          {/* Mobile toggle */}
+          <button className="lp-hamburger" onClick={() => setMobileMenu(!mobileMenu)}>
+            <span /><span /><span />
+          </button>
+        </div>
+
+        {/* Mobile menu */}
+        {mobileMenu && (
+          <div className="lp-mobile-menu">
+            <a href="#menu" className="lp-mobile-link" onClick={() => setMobileMenu(false)}>Menu</a>
+            <a href="#features" className="lp-mobile-link" onClick={() => setMobileMenu(false)}>Why Us</a>
+            {isLoggedIn ? (
+              <button className="lp-btn-primary lp-btn-block" onClick={() => navigate('/user/app')}>
+                🍽️ Go to App
+              </button>
+            ) : (
+              <>
+                <button className="lp-btn-ghost lp-btn-block" onClick={() => navigate('/user/login')}>Sign In</button>
+                <button className="lp-btn-primary lp-btn-block" onClick={() => navigate('/user/login')}>Sign Up Free</button>
+              </>
+            )}
+          </div>
+        )}
+      </nav>
+
+      {/* HERO */}
+      <section className="lp-hero">
+        <div className="lp-hero-bg">
+          <div className="lp-hero-orb lp-orb1" />
+          <div className="lp-hero-orb lp-orb2" />
+          <div className="lp-hero-orb lp-orb3" />
+        </div>
+        <div className="lp-hero-content">
+          <div className="lp-hero-text">
+            <div className="lp-hero-badge">
+              <span className="lp-hero-badge-dot" />
+              Now serving online · Fast delivery
+            </div>
+            <h1 className="lp-hero-title">
+              Cravings?<br />
+              <span className="lp-hero-accent">We've got you.</span>
+            </h1>
+            <p className="lp-hero-desc">
+              Order from our freshly curated menu — biryani, burgers, chai, and so much more. Delivered hot to your doorstep.
+            </p>
+            <div className="lp-hero-actions">
+              <button className="lp-cta-primary" onClick={() => navigate(isLoggedIn ? '/user/app' : '/user/login')}>
+                {isLoggedIn ? '🍽️ Start Ordering' : '🚀 Order Now — Free'}
+              </button>
+              <a href="#menu" className="lp-cta-secondary">Explore Menu ↓</a>
+            </div>
+            <div className="lp-hero-stats">
+              {[
+                { num: '100+', label: 'Menu Items' },
+                { num: '⚡', label: 'Fast Delivery' },
+                { num: '🌙', label: 'Night Cafe' },
+              ].map(s => (
+                <div key={s.label} className="lp-hero-stat">
+                  <div className="lp-hero-stat-num">{s.num}</div>
+                  <div className="lp-hero-stat-lbl">{s.label}</div>
+                </div>
               ))}
             </div>
+          </div>
+          <div className="lp-hero-image-wrap">
+            <div className="lp-hero-image-ring" />
+            <img
+              src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=800&auto=format&fit=crop"
+              alt="Delicious food spread"
+              className="lp-hero-image"
+              onError={e => e.currentTarget.src = FALLBACK}
+            />
+            <div className="lp-hero-float-1">⭐ 4.9 Rating</div>
+            <div className="lp-hero-float-2">🛵 Fast Delivery</div>
+          </div>
+        </div>
+      </section>
 
-            <div className="section-head" style={{ marginTop: 18 }}>
-              <h3>Items in selected category</h3>
+      {/* FEATURES STRIP */}
+      <section className="lp-features-strip">
+        <div className="lp-features-inner">
+          {[
+            { icon: '⚡', title: 'Quick Dispatch', desc: 'Your order moves fast from kitchen to your door' },
+            { icon: '🌙', title: 'Night Friendly', desc: 'Open late when you need food the most' },
+            { icon: '🥗', title: 'Fresh Food', desc: 'Made fresh every time, no compromises' },
+            { icon: '💳', title: 'Easy Payment', desc: 'COD, UPI, Cards — pay your way' },
+          ].map(f => (
+            <div key={f.title} className="lp-feature-item">
+              <div className="lp-feature-icon">{f.icon}</div>
+              <div>
+                <div className="lp-feature-title">{f.title}</div>
+                <div className="lp-feature-desc">{f.desc}</div>
+              </div>
             </div>
-            {loading ? (
-              <Card loading />
-            ) : selectedFoods.length ? (
-              <div className="h-scroll-list">
-                {selectedFoods.map((food) => (
-                  <article className="h-scroll-card food-card" key={food._id}>
-                    <div className="food-image-wrap">
-                      {food.image ? (
-                        <img
-                          src={food.image}
-                          alt={food.name}
-                          onError={(e) => {
-                            e.currentTarget.src = FALLBACK_FOOD_IMAGE;
-                          }}
-                        />
-                      ) : (
-                        <img src={FALLBACK_FOOD_IMAGE} alt={food.name || 'Food item'} />
-                      )}
-                    </div>
-                    <div className="food-card-body">
-                      <Typography.Text strong>{food.name}</Typography.Text>
-                      <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ minHeight: 36 }}>
-                        {food.description || 'Delicious item'}
-                      </Typography.Paragraph>
-                      <div className="food-card-actions">
-                        <span className="price">₹{food.price}</span>
-                        <Space size={6}>
-                          <Button size="small" onClick={() => navigate(`/user/food/${food._id}`)}>
-                            Details
-                          </Button>
-                          <Button
-                            size="small"
-                            type="primary"
-                            icon={<ShoppingCartOutlined />}
-                            onClick={() => onAddToCart(food._id)}
-                          >
-                            {cartQtyMap[food._id] ? `Add (${cartQtyMap[food._id]})` : 'Add'}
-                          </Button>
-                        </Space>
+          ))}
+        </div>
+      </section>
+
+      {/* MENU SECTION */}
+      <section className="lp-menu-section" id="menu">
+        <div className="lp-section-inner">
+          <div className="lp-section-head">
+            <span className="lp-section-badge">Our Menu</span>
+            <h2 className="lp-section-title">What's on the table?</h2>
+            <p className="lp-section-desc">Browse by category and add your favourites directly to cart.</p>
+          </div>
+
+          {/* Category pills */}
+          <div className="lp-cat-pills">
+            {loading && !categories.length
+              ? [1,2,3,4].map(i => <div key={i} className="lp-cat-pill lp-skeleton" style={{ width: 90 }} />)
+              : categories.map(cat => (
+                <button
+                  key={cat._id}
+                  className={`lp-cat-pill ${selectedCat === cat._id ? 'active' : ''}`}
+                  onClick={() => setSelectedCat(cat._id)}
+                >
+                  {cat.image
+                    ? <img src={cat.image} alt={cat.name} className="lp-cat-pill-img" onError={e => e.currentTarget.style.display='none'} />
+                    : <span className="lp-cat-pill-emoji">{cat.name.slice(0, 1)}</span>
+                  }
+                  {cat.name}
+                </button>
+              ))
+            }
+          </div>
+
+          {/* Items Grid */}
+          <div className="lp-food-grid">
+            {loading && !filtered.length
+              ? [1,2,3,4,5,6].map(i => <div key={i} className="lp-food-card lp-skeleton" style={{ height: 310 }} />)
+              : filtered.map(food => (
+                <div key={food._id} className="lp-food-card">
+                  <div className="lp-food-img-wrap">
+                    <img
+                      src={food.image || FALLBACK}
+                      alt={food.name}
+                      className="lp-food-img"
+                      onError={e => e.currentTarget.src = FALLBACK}
+                    />
+                    {food.isVeg !== undefined && (
+                      <div className={`lp-veg-badge ${food.isVeg ? 'veg' : 'nonveg'}`}>
+                        {food.isVeg ? '🟢' : '🔴'}
                       </div>
+                    )}
+                  </div>
+                  <div className="lp-food-body">
+                    <div className="lp-food-name">{food.name}</div>
+                    <div className="lp-food-desc">{food.description || 'A delicious treat'}</div>
+                    <div className="lp-food-footer">
+                      <div className="lp-food-price">₹{food.price}</div>
+                      <button
+                        className={`lp-add-btn ${cartMap[food._id] ? 'in-cart' : ''} ${addingId === food._id ? 'loading' : ''}`}
+                        onClick={() => handleAddToCart(food._id)}
+                        disabled={addingId === food._id}
+                      >
+                        {addingId === food._id
+                          ? '...'
+                          : cartMap[food._id]
+                          ? `✓ ${cartMap[food._id]} Added`
+                          : '+ Add'}
+                      </button>
                     </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <Empty description="No items found in this category" />
-            )}
-          </>
-        )}
-      </section>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
 
-      <section className="why-us-v2">
-        <div className="section-head">
-          <h3>Why customers choose us</h3>
-          <p>Consistent quality, simple ordering, and support that actually responds.</p>
+          {!loading && filtered.length === 0 && categories.length > 0 && (
+            <div className="lp-empty">
+              <div style={{ fontSize: 48 }}>🍽️</div>
+              <p>No items in this category yet</p>
+            </div>
+          )}
+
+          {cartCount > 0 && (
+            <div className="lp-view-cart-banner">
+              <span>🛒 {cartCount} item{cartCount > 1 ? 's' : ''} in cart</span>
+              <button className="lp-btn-primary" onClick={() => navigate('/user/app')}>
+                View Cart & Checkout →
+              </button>
+            </div>
+          )}
         </div>
-        <Row gutter={[14, 14]}>
-          <Col xs={24} md={8}>
-            <Card className="why-card-v2" bordered={false}>
-              <RocketOutlined className="why-card-icon" />
-              <Typography.Title level={5} style={{ marginBottom: 6 }}>
-                Quick dispatch
-              </Typography.Title>
-              <Typography.Text type="secondary">
-                Orders move fast from kitchen to delivery queue with real operational visibility.
-              </Typography.Text>
-            </Card>
-          </Col>
-          <Col xs={24} md={8}>
-            <Card className="why-card-v2" bordered={false}>
-              <SafetyCertificateOutlined className="why-card-icon" />
-              <Typography.Title level={5} style={{ marginBottom: 6 }}>
-                Hygiene focused
-              </Typography.Title>
-              <Typography.Text type="secondary">
-                Standardized prep and handling process for better reliability every single time.
-              </Typography.Text>
-            </Card>
-          </Col>
-          <Col xs={24} md={8}>
-            <Card className="why-card-v2" bordered={false}>
-              <ClockCircleOutlined className="why-card-icon" />
-              <Typography.Title level={5} style={{ marginBottom: 6 }}>
-                Late-night friendly
-              </Typography.Title>
-              <Typography.Text type="secondary">
-                Built for real-world convenience when customers want food beyond usual timings.
-              </Typography.Text>
-            </Card>
-          </Col>
-        </Row>
       </section>
 
-      <section className="coming-soon-apps">
-        <div className="apps-coming-shell">
-          <div className="apps-coming-head">
-            <Tag color="blue" className="apps-coming-badge">
-              MOBILE APPS
-            </Tag>
-            <Typography.Title level={3} style={{ margin: '8px 0 6px' }}>
-              Android & iOS applications are coming soon
-            </Typography.Title>
-            <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-              We are polishing native experience for both platforms. Until launch, you can use the website with the same account and smooth COD checkout.
-            </Typography.Paragraph>
+      {/* WHY US */}
+      <section className="lp-why-section" id="features">
+        <div className="lp-section-inner">
+          <div className="lp-section-head">
+            <span className="lp-section-badge">Why Choose Us</span>
+            <h2 className="lp-section-title">The Chatora Adda Promise</h2>
+            <p className="lp-section-desc">Real food. Real speed. Real support.</p>
           </div>
-
-          <div className="apps-platform-grid">
-            <Card className="apps-platform-card" bordered={false}>
-              <div className="platform-icon android">
-                <AndroidOutlined />
+          <div className="lp-why-grid">
+            {[
+              { icon: '🚀', title: 'Quick Dispatch', desc: 'Orders move from kitchen to delivery queue instantly. No delays, no excuses.' },
+              { icon: '🛡️', title: 'Hygiene First', desc: "Standardized prep and handling every single time. We don't cut corners." },
+              { icon: '🌙', title: 'Late Night Friendly', desc: 'When everyone else is closed, we deliver. Built for real-world cravings.' },
+              { icon: '💬', title: 'Real Support', desc: 'Talk to a real person, not a bot. We respond when it matters.' },
+            ].map(w => (
+              <div key={w.title} className="lp-why-card">
+                <div className="lp-why-icon">{w.icon}</div>
+                <div className="lp-why-title">{w.title}</div>
+                <div className="lp-why-desc">{w.desc}</div>
               </div>
-              <Typography.Title level={5} style={{ margin: '10px 0 4px' }}>
-                Android App
-              </Typography.Title>
-              <Typography.Text type="secondary">In QA and release optimization</Typography.Text>
-            </Card>
-
-            <Card className="apps-platform-card" bordered={false}>
-              <div className="platform-icon ios">
-                <AppleOutlined />
-              </div>
-              <Typography.Title level={5} style={{ margin: '10px 0 4px' }}>
-                iOS App
-              </Typography.Title>
-              <Typography.Text type="secondary">Design system and feature parity in progress</Typography.Text>
-            </Card>
-          </div>
-
-          <div className="apps-roadmap">
-            <div className="roadmap-item">
-              <CheckCircleOutlined />
-              <span>Core ordering system completed</span>
-            </div>
-            <div className="roadmap-item">
-              <RocketOutlined />
-              <span>Native app launch is the next milestone</span>
-            </div>
-          </div>
-
-          <div className="apps-coming-actions">
-            <Button type="primary" size="large" onClick={() => navigate(isLoggedIn ? '/user/app' : '/user/login')}>
-              {isLoggedIn ? 'Order on Web Now' : 'Login & Order on Web'}
-            </Button>
-            <Button size="large" onClick={() => navigate(isLoggedIn ? '/user/items' : '/user/login')}>
-              View Full Menu
-            </Button>
+            ))}
           </div>
         </div>
       </section>
 
-      <footer className="landing-footer-v2">
-        <div className="landing-footer-inner">
-          <div className="footer-brand-v2">
-            <img src={logoImage} alt="Chatora Adda Logo" className="footer-brand-logo" />
+      {/* HOW IT WORKS */}
+      <section className="lp-how-section">
+        <div className="lp-section-inner">
+          <div className="lp-section-head">
+            <span className="lp-section-badge">How It Works</span>
+            <h2 className="lp-section-title">3 simple steps</h2>
+          </div>
+          <div className="lp-steps">
+            {[
+              { step: '01', icon: '📱', title: 'Browse & Pick', desc: 'Explore our full menu, pick your favourites' },
+              { step: '02', icon: '🛒', title: 'Add to Cart', desc: 'Add items, apply coupons, choose payment' },
+              { step: '03', icon: '🛵', title: 'Fast Delivery', desc: 'We deliver hot food right to your door' },
+            ].map((s, i) => (
+              <div key={s.step} className="lp-step">
+                <div className="lp-step-num">{s.step}</div>
+                <div className="lp-step-icon">{s.icon}</div>
+                <div className="lp-step-title">{s.title}</div>
+                <div className="lp-step-desc">{s.desc}</div>
+                {i < 2 && <div className="lp-step-arrow">→</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* APP SECTION */}
+      <section className="lp-app-section" id="app">
+        <div className="lp-section-inner">
+          <div className="lp-app-card">
+            <div className="lp-app-text">
+              <span className="lp-section-badge">Mobile Apps</span>
+              <h2 className="lp-app-title">Android & iOS Apps Coming Soon</h2>
+              <p className="lp-app-desc">
+                We're polishing a native experience for both platforms. Until then, use our web app — same account, same menu, smooth checkout.
+              </p>
+              <div className="lp-app-roadmap">
+                <div className="lp-roadmap-item">✅ Core ordering system live</div>
+                <div className="lp-roadmap-item">✅ Web app with full features</div>
+                <div className="lp-roadmap-item">🔄 Native Android app in QA</div>
+                <div className="lp-roadmap-item">🔄 iOS app in design</div>
+              </div>
+              <button className="lp-cta-primary" style={{ marginTop: 24 }} onClick={() => navigate(isLoggedIn ? '/user/app' : '/user/login')}>
+                {isLoggedIn ? 'Order on Web Now →' : 'Sign Up & Order Now →'}
+              </button>
+            </div>
+            <div className="lp-app-platforms">
+              <div className="lp-platform-card android">
+                <div className="lp-platform-icon">🤖</div>
+                <div className="lp-platform-name">Android</div>
+                <div className="lp-platform-status">In QA Testing</div>
+              </div>
+              <div className="lp-platform-card ios">
+                <div className="lp-platform-icon">🍎</div>
+                <div className="lp-platform-name">iOS</div>
+                <div className="lp-platform-status">Design Phase</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CTA BANNER */}
+      <section className="lp-cta-section">
+        <div className="lp-section-inner">
+          <div className="lp-cta-banner">
             <div>
-              <Typography.Title level={5} style={{ margin: 0, color: '#fff' }}>
-                Chatora Adda
-              </Typography.Title>
-              <Typography.Text style={{ color: 'rgba(255,255,255,0.72)' }}>
-                Night Online Cafe
-              </Typography.Text>
+              <h2 className="lp-cta-title">Ready to order?</h2>
+              <p className="lp-cta-sub">Join thousands of happy customers. Sign up takes 30 seconds.</p>
+            </div>
+            <div className="lp-cta-actions">
+              <button className="lp-cta-primary" onClick={() => navigate('/user/login')}>
+                {isLoggedIn ? '🍽️ Go to App' : '🚀 Order Now — Free'}
+              </button>
+              {!isLoggedIn && (
+                <button className="lp-cta-secondary-white" onClick={() => navigate('/user/login')}>
+                  Sign In →
+                </button>
+              )}
             </div>
           </div>
-          <Space wrap>
-            <Button onClick={() => navigate('/privacypolicy')}>Privacy Policy</Button>
-            <Button type="primary" onClick={() => navigate(isLoggedIn ? '/user/app' : '/user/login')}>
-              {isLoggedIn ? 'Go to User App' : 'Login to Order'}
-            </Button>
-          </Space>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="lp-footer">
+        <div className="lp-footer-inner">
+          <div className="lp-footer-brand">
+            <img src={logoImage} alt="Chatora Adda" className="lp-footer-logo" />
+            <div>
+              <div className="lp-footer-brand-name">Chatora Adda</div>
+              <div className="lp-footer-brand-tag">Night Online Cafe</div>
+            </div>
+          </div>
+          <div className="lp-footer-links">
+            <a href="#menu" className="lp-footer-link">Menu</a>
+            <a href="#features" className="lp-footer-link">Features</a>
+            <span className="lp-footer-link" onClick={() => navigate('/privacypolicy')} style={{ cursor:'pointer' }}>Privacy</span>
+          </div>
+          <div className="lp-footer-right">
+            <p className="lp-footer-copy">© 2025 Chatora Adda. All rights reserved.</p>
+          </div>
         </div>
       </footer>
+
+      {/* Floating cart */}
       {cartCount > 0 && (
-        <Badge count={cartCount} className="floating-cart-badge">
-          <Button
-            type="primary"
-            size="large"
-            className="floating-cart-btn"
-            icon={<ShoppingCartOutlined />}
-            onClick={() => navigate('/user/app')}
-          >
-            Go to Cart
-          </Button>
-        </Badge>
+        <button className="lp-floating-cart" onClick={() => navigate('/user/app')}>
+          🛒 {cartCount} — View Cart
+        </button>
       )}
     </div>
   );

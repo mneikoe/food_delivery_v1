@@ -40,4 +40,6 @@ const productSchema = new mongoose.Schema({
   },
 });
 
+productSchema.index({ categoryId: 1 });
+
 module.exports = mongoose.model("Product", productSchema);
