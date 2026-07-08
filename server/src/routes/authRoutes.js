@@ -8,12 +8,15 @@ const { sendOtpSchema, verifyOtpSchema, loginSchema } = require("../validators/a
 const rateLimit = require("express-rate-limit");
 
 const otpLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 5, // Limit each IP to 5 requests per window
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 3, // Limit each IP to 3 requests per minute
   handler: (req, res) => {
+    const resetTime = req.rateLimit && req.rateLimit.resetTime ? new Date(req.rateLimit.resetTime).getTime() : Date.now() + 60000;
+    const retryAfter = Math.ceil((resetTime - Date.now()) / 1000);
     res.status(429).json({
       success: false,
-      message: "Too many OTP requests. Please try again later."
+      error: `Too many OTP requests. Please try again after ${retryAfter > 0 ? retryAfter : 60} seconds.`,
+      message: `Too many OTP requests. Please try again after ${retryAfter > 0 ? retryAfter : 60} seconds.`
     });
   },
   standardHeaders: true,

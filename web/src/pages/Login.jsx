@@ -26,7 +26,7 @@ export default function Login() {
       setSuccess('OTP sent! Check your email inbox.');
       setOtpStep('otp');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to send OTP. Try again.');
+      setError(err.response?.data?.error || err.response?.data?.message || 'Failed to send OTP. Try again.');
     } finally {
       setLoading(false);
     }

@@ -28,7 +28,7 @@ export default function UserLogin() {
       setSuccess('OTP sent to your inbox!');
       setOtpStep('otp');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to send OTP');
+      setError(err.response?.data?.error || err.response?.data?.message || 'Failed to send OTP');
     } finally { setLoading(false); }
   };
 
