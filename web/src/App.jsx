@@ -27,6 +27,54 @@ import './App.css';
 
 const { Content } = Layout;
 
+const customerTheme = {
+  token: {
+    colorPrimary: '#f97316',
+    colorBgBase: '#020617',
+    colorBgContainer: '#111827',
+    colorBorder: '#1f2937',
+    colorText: '#f8fafc',
+    colorTextDescription: '#cbd5e1',
+    colorTextHeading: '#f8fafc',
+    fontFamily: "'Inter', sans-serif",
+    borderRadiusLG: 16,
+    borderRadius: 12,
+    borderRadiusSM: 8,
+  },
+  components: {
+    Card: {
+      colorBgContainer: 'rgba(17, 24, 39, 0.6)',
+      borderColor: '#1f2937',
+      borderRadiusLG: 16,
+    },
+    Button: {
+      borderRadius: 10,
+      controlHeight: 40,
+      fontFamily: "'Inter', sans-serif",
+      fontWeight: 600,
+    },
+    Input: {
+      colorBgContainer: '#0b0f19',
+      colorBorder: '#1f2937',
+      colorText: '#f8fafc',
+      colorTextPlaceholder: '#94a3b8',
+    },
+    Segmented: {
+      itemSelectedBg: '#f97316',
+      itemSelectedColor: '#ffffff',
+      colorBgLayout: 'rgba(255, 255, 255, 0.03)',
+    },
+    Drawer: {
+      colorBgContainer: '#111827',
+      colorText: '#f8fafc',
+    },
+    Modal: {
+      colorBgContainer: '#111827',
+      colorText: '#f8fafc',
+    }
+  }
+};
+
 function App() {
   const [collapsed, setCollapsed] = useState(false);
   const token = localStorage.getItem('admin_token');
@@ -37,67 +85,108 @@ function App() {
       theme={{
         token: {
           colorPrimary: '#10B981',
+          colorPrimaryHover: '#059669',
           fontFamily: "'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          borderRadius: 8,
           borderRadiusLG: 12,
-          boxShadowSecondary: '0 1px 2px 0 rgba(0, 0, 0, 0.03), 0 1px 6px -1px rgba(0, 0, 0, 0.02)',
+          colorBgLayout: '#f8fafc',
+          colorBgContainer: '#ffffff',
+          colorBorderSecondary: '#f1f5f9',
+          colorText: '#0f172a',
+          colorTextDescription: '#64748b',
+          boxShadowSecondary: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -2px rgba(0, 0, 0, 0.05)',
         },
         components: {
           Card: {
             borderRadiusLG: 12,
+            colorBorderSecondary: '#f1f5f9',
+            boxShadowTertiary: '0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05)',
           },
+          Table: {
+            headerBg: '#f8fafc',
+            headerColor: '#0f172a',
+            headerBorderRadius: 8,
+            rowHoverBg: '#f1f5f9',
+          },
+          Button: {
+            controlHeight: 38,
+            fontWeight: 600,
+          },
+          Input: {
+            controlHeight: 38,
+          },
+          Select: {
+            controlHeight: 38,
+          }
         },
       }}
     >
       <Router>
         <Routes>
           {/* Public Landing Page */}
-          <Route path="/" element={<LandingPage />} />
-          <Route path="/privacypolicy" element={<PrivacyPolicy />} />
+          <Route path="/" element={<ConfigProvider theme={customerTheme}><LandingPage /></ConfigProvider>} />
+          <Route path="/privacypolicy" element={<ConfigProvider theme={customerTheme}><PrivacyPolicy /></ConfigProvider>} />
           
           {/* Admin Login */}
           <Route path="/admin/login" element={!token ? <Login /> : <Navigate to="/admin" replace />} />
+          
+          {/* Customer Routes with Unified Theme */}
           <Route
             path="/user/login"
-            element={!userToken ? <UserLogin /> : <Navigate to="/user/app" replace />}
+            element={
+              <ConfigProvider theme={customerTheme}>
+                {!userToken ? <UserLogin /> : <Navigate to="/user/app" replace />}
+              </ConfigProvider>
+            }
           />
           <Route
             path="/user/app"
             element={
-              <UserProtectedRoute>
-                <UserApp />
-              </UserProtectedRoute>
+              <ConfigProvider theme={customerTheme}>
+                <UserProtectedRoute>
+                  <UserApp />
+                </UserProtectedRoute>
+              </ConfigProvider>
             }
           />
           <Route
             path="/user/food/:foodId"
             element={
-              <UserProtectedRoute>
-                <UserFoodDetails />
-              </UserProtectedRoute>
+              <ConfigProvider theme={customerTheme}>
+                <UserProtectedRoute>
+                  <UserFoodDetails />
+                </UserProtectedRoute>
+              </ConfigProvider>
             }
           />
           <Route
             path="/user/categories"
             element={
-              <UserProtectedRoute>
-                <UserCategoriesPage />
-              </UserProtectedRoute>
+              <ConfigProvider theme={customerTheme}>
+                <UserProtectedRoute>
+                  <UserCategoriesPage />
+                </UserProtectedRoute>
+              </ConfigProvider>
             }
           />
           <Route
             path="/user/items"
             element={
-              <UserProtectedRoute>
-                <UserAllItemsPage />
-              </UserProtectedRoute>
+              <ConfigProvider theme={customerTheme}>
+                <UserProtectedRoute>
+                  <UserAllItemsPage />
+                </UserProtectedRoute>
+              </ConfigProvider>
             }
           />
           <Route
             path="/user/category/:categoryId/items"
             element={
-              <UserProtectedRoute>
-                <UserCategoryItemsPage />
-              </UserProtectedRoute>
+              <ConfigProvider theme={customerTheme}>
+                <UserProtectedRoute>
+                  <UserCategoryItemsPage />
+                </UserProtectedRoute>
+              </ConfigProvider>
             }
           />
           <Route path="/user" element={<Navigate to={userToken ? '/user/app' : '/user/login'} replace />} />

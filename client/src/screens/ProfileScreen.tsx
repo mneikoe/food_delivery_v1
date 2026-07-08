@@ -5,6 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,7 +27,7 @@ export default function ProfileScreen({ navigation }: any) {
   const styles = getStyles(colors, tokens, isDark);
 
   const handleLogout = () => {
-    showAlert(
+    Alert.alert(
       'Logout',
       'Are you sure you want to logout?',
       [
@@ -104,82 +105,84 @@ export default function ProfileScreen({ navigation }: any) {
       </View>
 
       {/* Location Card */}
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardHeaderLeft}>
-            <Ionicons name="location-outline" size={20} color={tokens.colors.primary} />
-            <Text style={styles.cardTitle}>Current Location</Text>
+      {user?.role !== 'ADMIN' && (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderLeft}>
+              <Ionicons name="location-outline" size={20} color={tokens.colors.primary} />
+              <Text style={styles.cardTitle}>Current Location</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.updateButton}
+              onPress={handleUpdateLocation}
+              disabled={isUpdatingLocation}
+            >
+              {isUpdatingLocation ? (
+                <ActivityIndicator size="small" color={tokens.colors.primary} />
+              ) : (
+                <>
+                  <Ionicons name="refresh-outline" size={16} color={tokens.colors.primary} />
+                  <Text style={styles.updateButtonText}>Update</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={styles.updateButton}
-            onPress={handleUpdateLocation}
-            disabled={isUpdatingLocation}
-          >
-            {isUpdatingLocation ? (
-              <ActivityIndicator size="small" color={tokens.colors.primary} />
-            ) : (
-              <>
-                <Ionicons name="refresh-outline" size={16} color={tokens.colors.primary} />
-                <Text style={styles.updateButtonText}>Update</Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {(location?.city && location.city.trim()) || (location?.suburb && location.suburb.trim()) ? (
+            <>
+              {location.suburb && location.suburb.trim() && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Suburb</Text>
+                  <Text style={styles.detailValue}>
+                    {location.suburb}
+                    {location.isManual && (
+                      <Text style={styles.manualBadge}> (Manual)</Text>
+                    )}
+                  </Text>
+                </View>
+              )}
+              {location.city && location.city.trim() && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>City</Text>
+                  <Text style={styles.detailValue}>
+                    {location.city}
+                    {location.isManual && !(location.suburb && location.suburb.trim()) && (
+                      <Text style={styles.manualBadge}> (Manual)</Text>
+                    )}
+                  </Text>
+                </View>
+              )}
+              {location.state && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>State</Text>
+                  <Text style={styles.detailValue}>{location.state}</Text>
+                </View>
+              )}
+              {location.country && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Country</Text>
+                  <Text style={styles.detailValue}>{location.country}</Text>
+                </View>
+              )}
+              {location.address && (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>Address</Text>
+                  <Text style={[styles.detailValue, styles.addressText]}>
+                    {location.address}
+                  </Text>
+                </View>
+              )}
+            </>
+          ) : (
+            <View style={styles.emptyState}>
+              <Ionicons name="location-outline" size={32} color={colors.muted} />
+              <Text style={styles.emptyStateText}>No location detected</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Location will appear here once detected
+              </Text>
+            </View>
+          )}
         </View>
-        {(location?.city && location.city.trim()) || (location?.suburb && location.suburb.trim()) ? (
-          <>
-            {location.suburb && location.suburb.trim() && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Suburb</Text>
-                <Text style={styles.detailValue}>
-                  {location.suburb}
-                  {location.isManual && (
-                    <Text style={styles.manualBadge}> (Manual)</Text>
-                  )}
-                </Text>
-              </View>
-            )}
-            {location.city && location.city.trim() && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>City</Text>
-                <Text style={styles.detailValue}>
-                  {location.city}
-                  {location.isManual && !(location.suburb && location.suburb.trim()) && (
-                    <Text style={styles.manualBadge}> (Manual)</Text>
-                  )}
-                </Text>
-              </View>
-            )}
-            {location.state && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>State</Text>
-                <Text style={styles.detailValue}>{location.state}</Text>
-              </View>
-            )}
-            {location.country && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Country</Text>
-                <Text style={styles.detailValue}>{location.country}</Text>
-              </View>
-            )}
-            {location.address && (
-              <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Address</Text>
-                <Text style={[styles.detailValue, styles.addressText]}>
-                  {location.address}
-                </Text>
-              </View>
-            )}
-          </>
-        ) : (
-          <View style={styles.emptyState}>
-            <Ionicons name="location-outline" size={32} color={colors.muted} />
-            <Text style={styles.emptyStateText}>No location detected</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Location will appear here once detected
-            </Text>
-          </View>
-        )}
-      </View>
+      )}
 
       {/* Options Card */}
       <View style={styles.card}>
@@ -191,7 +194,7 @@ export default function ProfileScreen({ navigation }: any) {
         </View>
 
         {/* Order History */}
-        {user?.role !== 'DELIVERY_PARTNER' && (
+        {user?.role !== 'DELIVERY_PARTNER' && user?.role !== 'ADMIN' && (
           <TouchableOpacity
             style={styles.optionItem}
             onPress={handleOrderHistory}

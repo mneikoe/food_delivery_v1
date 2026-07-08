@@ -3,8 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Alert } from 'react-native';
 
 export const api = axios.create({
-  baseURL: 'http://localhost:8080/api', // Utilizing adb reverse tcp:8080 tcp:8080
-  // baseURL: 'http://192.168.29.216:8080/api', // Physical phone -> laptop Wi-Fi IP fallback
+  // baseURL: 'http://localhost:8080/api', // Utilizing adb reverse tcp:8080 tcp:8080
+  baseURL: 'http://192.168.29.180:8080/api', // Physical phone -> laptop Wi-Fi IP fallback
   //baseURL: 'http://10.0.2.2:8080/api',     // Emulator only
   headers: {
     'Content-Type': 'application/json',

@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   FlatList,
   TouchableOpacity,
   ActivityIndicator,
   ImageBackground,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -15,36 +15,40 @@ import SearchItemCard from '../components/SearchItemCard';
 import { useTheme } from '../context/ThemeContext';
 import { api } from '../api/api';
 import { useAuth } from '../context/AuthContext';
+import { useAlert } from '../context/AlertContext';
 
 export default function CategoryProductsScreen({ route, navigation }: any) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const { colors, tokens } = useTheme();
+  const { showAlert } = useAlert();
   const styles = getStyles(colors, tokens);
   
   const categoryId = route?.params?.categoryId;
   const categoryName = route?.params?.categoryName;
   const categoryImage = route?.params?.categoryImage;
+  const [categoryDescription, setCategoryDescription] = useState(route?.params?.categoryDescription || '');
   const [products, setProducts] = useState<any[]>([]);
+  const [otherProducts, setOtherProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (token) {
       fetchProducts();
+      fetchOtherProducts();
     }
   }, [token, categoryId]);
 
   useEffect(() => {
-    if (token && searchQuery) {
-      const timeoutId = setTimeout(() => {
-        fetchProducts();
-      }, 500);
-      return () => clearTimeout(timeoutId);
-    } else if (token && !searchQuery) {
-      fetchProducts();
+    if (token && !categoryDescription && categoryId) {
+      api.get('/user/categories').then((res) => {
+        const cat = res.data?.find((c: any) => c._id === categoryId);
+        if (cat?.description) {
+          setCategoryDescription(cat.description);
+        }
+      }).catch(err => console.warn(err));
     }
-  }, [searchQuery, categoryId, token]);
+  }, [token, categoryId, categoryDescription]);
 
   const fetchProducts = async () => {
     setLoading(true);
@@ -52,9 +56,6 @@ export default function CategoryProductsScreen({ route, navigation }: any) {
       const params: any = {};
       if (categoryId) {
         params.categoryId = categoryId;
-      }
-      if (searchQuery) {
-        params.search = searchQuery;
       }
       const response = await api.get('/user/products', { params });
       setProducts(response.data);
@@ -65,8 +66,67 @@ export default function CategoryProductsScreen({ route, navigation }: any) {
     }
   };
 
+  const fetchOtherProducts = async () => {
+    try {
+      const response = await api.get('/user/products');
+      const allProds = response.data || [];
+      const filtered = allProds.filter((p: any) => {
+        const prodCatId = p.categoryId?._id || p.categoryId;
+        return prodCatId !== categoryId;
+      });
+      setOtherProducts(filtered);
+    } catch (error) {
+      console.error('Failed to load other products:', error);
+    }
+  };
+
   const handleProductPress = (item: any) => {
     navigation.navigate('ProductDetails', { item });
+  };
+
+  const handleAddToCart = async (product: any) => {
+    try {
+      await api.post('/user/cart/items', { productId: product._id, quantity: 1 });
+      showAlert('Success', `${product.name} added to cart!`);
+    } catch (err: any) {
+      showAlert('Error', err?.response?.data?.error || 'Failed to add item to cart');
+    }
+  };
+
+  const renderFooter = () => {
+    if (otherProducts.length === 0) return null;
+    return (
+      <View style={styles.footerSection}>
+        <Text style={styles.footerTitle}>Explore Other Delicious Dishes</Text>
+        <FlatList
+          horizontal
+          data={otherProducts}
+          keyExtractor={(item) => 'other_' + item._id}
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.horizontalList}
+          renderItem={({ item }) => (
+            <View style={styles.otherCard}>
+              <TouchableOpacity onPress={() => handleProductPress(item)} activeOpacity={0.9}>
+                <Image
+                  source={item.image ? { uri: item.image } : require('../assets/placeholder.png')}
+                  style={styles.otherImage}
+                />
+              </TouchableOpacity>
+              <View style={styles.otherInfo}>
+                <Text style={styles.otherName} numberOfLines={1}>{item.name}</Text>
+                <Text style={styles.otherPrice}>₹{item.price}</Text>
+                <TouchableOpacity
+                  style={styles.viewBtn}
+                  onPress={() => handleProductPress(item)}
+                >
+                  <Text style={styles.viewBtnText}>View Details</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        />
+      </View>
+    );
   };
 
   return (
@@ -95,27 +155,17 @@ export default function CategoryProductsScreen({ route, navigation }: any) {
               >
                 <Ionicons name="arrow-back" size={24} color={tokens.colors.white} />
               </TouchableOpacity>
-              <Text style={styles.headerTitle} numberOfLines={1}>
-                {categoryName || 'Category'}
-              </Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.headerTitle} numberOfLines={1}>
+                  {categoryName || 'Category'}
+                </Text>
+                {categoryDescription ? (
+                  <Text style={styles.categoryDesc} numberOfLines={2}>
+                    {categoryDescription}
+                  </Text>
+                ) : null}
+              </View>
             </View>
-          </View>
-
-          {/* SEARCH BAR */}
-          <View style={styles.searchBox}>
-            <Ionicons name="search-outline" size={20} color={colors.textSecondary} />
-            <TextInput
-              placeholder="Search dishes, cuisines..."
-              placeholderTextColor={colors.muted}
-              style={[styles.input, { color: colors.textPrimary }]}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={20} color={colors.muted} />
-              </TouchableOpacity>
-            )}
           </View>
         </ImageBackground>
       </View>
@@ -146,13 +196,14 @@ export default function CategoryProductsScreen({ route, navigation }: any) {
               />
             </TouchableOpacity>
           )}
+          ListFooterComponent={renderFooter}
         />
       ) : (
         <View style={styles.emptyContainer}>
-          <Ionicons name="search-outline" size={64} color={colors.muted} />
+          <Ionicons name="restaurant-outline" size={64} color={colors.muted} />
           <Text style={styles.emptyTitle}>No products found</Text>
           <Text style={styles.emptySubtext}>
-            Try adjusting your search or browse other categories
+            There are currently no items under this category.
           </Text>
         </View>
       )}
@@ -179,7 +230,7 @@ const getStyles = (colors: any, tokens: any) => StyleSheet.create({
   headerBackground: {
     paddingHorizontal: 20,
     paddingBottom: 20,
-    minHeight: 250,
+    minHeight: 180,
   },
   headerImageStyle: {
     opacity: 0.6,
@@ -192,12 +243,12 @@ const getStyles = (colors: any, tokens: any) => StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
     zIndex: 1,
+    marginTop: 10,
   },
   headerLeft: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 12,
     flex: 1,
   },
@@ -212,31 +263,18 @@ const getStyles = (colors: any, tokens: any) => StyleSheet.create({
   },
   headerTitle: {
     fontFamily: 'PlusJakartaSans-Bold',
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '800',
     color: tokens.colors.white,
     letterSpacing: -0.5,
-    flex: 1,
-    marginTop: 40,
+    marginTop: 12,
   },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    minHeight: 50,
-    gap: 12,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    zIndex: 1,
-    marginTop: 40,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '500',
-    paddingVertical: 0,
+  categoryDesc: {
+    fontFamily: 'PlusJakartaSans-Regular',
+    fontSize: 13,
+    color: 'rgba(255, 255, 255, 0.85)',
+    marginTop: 4,
+    lineHeight: 18,
   },
   list: {
     padding: 20,
@@ -274,5 +312,75 @@ const getStyles = (colors: any, tokens: any) => StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
+  },
+  footerSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingBottom: 20,
+  },
+  footerTitle: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 16,
+  },
+  horizontalList: {
+    paddingBottom: 10,
+  },
+  otherCard: {
+    width: 150,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 2,
+    marginRight: 16,
+  },
+  otherImage: {
+    width: '100%',
+    height: 90,
+    backgroundColor: colors.background,
+  },
+  otherInfo: {
+    padding: 10,
+  },
+  otherName: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  otherPrice: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: 12,
+    color: tokens.colors.primary,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  otherActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  viewBtn: {
+    backgroundColor: tokens.colors.primary,
+    borderRadius: 8,
+    paddingVertical: 6,
+    alignItems: 'center',
+    width: '100%',
+  },
+  viewBtnText: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 11,
+    color: tokens.colors.white,
+    fontWeight: '700',
   },
 });

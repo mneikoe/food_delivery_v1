@@ -62,6 +62,11 @@ import {
   verifyRazorpayPayment,
 } from '../api/userApi';
 import logoImage from '../assets/logo-chatora.png';
+import { supabase } from '../services/supabase';
+import BrandHeader from '../components/user/BrandHeader';
+import CategoryPill from '../components/user/CategoryPill';
+import FoodCard from '../components/user/FoodCard';
+import QuantitySelector from '../components/user/QuantitySelector';
 import './UserApp.css';
 
 const DELIVERY_FEE = 28;
@@ -167,6 +172,7 @@ export default function UserApp() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [selectedAddressId, setSelectedAddressId] = useState(undefined);
+  const [addressConfirmModalOpen, setAddressConfirmModalOpen] = useState(false);
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [applyingCoupon, setApplyingCoupon] = useState(false);
@@ -242,8 +248,82 @@ export default function UserApp() {
     }
   };
 
+  const autoDetectLocation = async () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            await updateUserLocation({ latitude, longitude });
+          } catch (err) {
+            console.warn('Auto location update failed:', err);
+          }
+        },
+        (err) => {
+          console.warn('Geolocation permission not granted automatically:', err);
+        }
+      );
+    }
+  };
+
+  const reloadOrdersListAndDetails = async () => {
+    try {
+      const response = await getUserOrders();
+      setOrders(response.data || []);
+    } catch (err) {
+      console.error('Failed to reload orders in real-time:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (orderDetailsModalOpen && selectedOrderDetails?._id) {
+      const fetchDetails = async () => {
+        try {
+          const res = await getUserOrderDetails(selectedOrderDetails._id);
+          setSelectedOrderDetails((prev) => (prev?._id === selectedOrderDetails._id ? { ...prev, ...(res.data || {}) } : prev));
+        } catch (err) {
+          console.warn('Failed to refresh selected order details:', err);
+        }
+      };
+      // Fetch immediately
+      fetchDetails();
+      
+      // Also poll every 10 seconds as a robust backup
+      const t = setInterval(fetchDetails, 10000);
+      return () => clearInterval(t);
+    }
+  }, [orderDetailsModalOpen, selectedOrderDetails?._id]);
+
+  useEffect(() => {
+    if (!profile?._id) return;
+
+    const channel = supabase.channel(`user_${profile._id}_orders`);
+
+    channel.on('broadcast', { event: 'order_update' }, (payload) => {
+      console.log('Realtime order update received in web panel:', payload);
+      reloadOrdersListAndDetails();
+      if (payload?.payload?.orderId && selectedOrderDetails?._id === payload.payload.orderId) {
+        getUserOrderDetails(payload.payload.orderId).then((res) => {
+          setSelectedOrderDetails((prev) => (prev?._id === payload.payload.orderId ? { ...prev, ...(res.data || {}) } : prev));
+        }).catch(err => console.warn(err));
+      }
+    });
+
+    channel.subscribe((status) => {
+      if (status === 'SUBSCRIBED') {
+        console.log(`Subscribed to user_${profile._id}_orders channel in web panel`);
+      }
+    });
+
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [profile?._id, selectedOrderDetails?._id]);
+
   useEffect(() => {
     loadAll();
+    autoDetectLocation();
   }, []);
 
   useEffect(() => {
@@ -445,6 +525,7 @@ export default function UserApp() {
       { lat: 0, lng: 0 };
     const payload = {
       ...values,
+      pincode: values.pincode ? String(values.pincode).trim() : '',
       coordinates: {
         lat: Number(coords.lat) || 0,
         lng: Number(coords.lng) || 0,
@@ -463,7 +544,9 @@ export default function UserApp() {
       addressForm.resetFields();
       await fetchAddressesOnly();
     } catch (error) {
-      message.error(error.response?.data?.error || 'Failed to save address');
+      const serverErr = error.response?.data;
+      const errMsg = serverErr?.errors ? serverErr.errors.join(', ') : (serverErr?.message || serverErr?.error || 'Failed to save address');
+      message.error(errMsg);
     }
   };
 
@@ -655,7 +738,7 @@ export default function UserApp() {
       openProfileGateModal();
       return;
     }
-    await executePlaceOrder();
+    setAddressConfirmModalOpen(true);
   };
 
   const openOrderDetails = async (order) => {
@@ -733,48 +816,16 @@ export default function UserApp() {
 
   return (
     <div className="user-app-shell">
-      <div className="user-app-header">
-        <button type="button" className="user-brand user-brand-btn" onClick={() => navigate('/')}>
-          <img src={logoImage} alt="Chatora Adda Logo" className="user-brand-logo" />
-          <div className="user-brand-copy">
-            <Typography.Title level={4} style={{ margin: 0 }}>
-              Chatora Adda
-            </Typography.Title>
-            <Typography.Text type="secondary">Night Online Cafe</Typography.Text>
-          </div>
-        </button>
-        <Space wrap className="user-header-actions">
-          <Button onClick={() => navigate('/')}>Home</Button>
-          <Button type="primary" onClick={() => navigate('/user/app')}>
-            User App
-          </Button>
-          <Button icon={<UserOutlined />} onClick={openProfileModal}>
-            {profile?.name || 'Profile'}
-          </Button>
-          {profile?.isEmailVerified ? (
-            <Tag color="success" style={{ borderRadius: 6, padding: '2px 8px', border: 'none', background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 600 }}>
-              ✓ Verified
-            </Tag>
-          ) : (
-            <Tag color="error" onClick={openVerificationModal} style={{ borderRadius: 6, padding: '2px 8px', border: 'none', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', fontWeight: 600, cursor: 'pointer' }}>
-              ⚠️ Click to Verify
-            </Tag>
-          )}
-          <Badge count={cartCount}>
-            <Button icon={<ShoppingCartOutlined />} onClick={() => setCartDrawerOpen(true)}>
-              Cart
-            </Button>
-          </Badge>
-          <Button danger icon={<LogoutOutlined />} onClick={handleLogout}>
-            Logout
-          </Button>
-        </Space>
-        <Button
-          className="user-menu-toggle"
-          icon={<MenuOutlined />}
-          onClick={() => setMobileMenuOpen(true)}
-        />
-      </div>
+      <BrandHeader
+        profile={profile}
+        openProfileModal={openProfileModal}
+        openVerificationModal={openVerificationModal}
+        setMobileMenuOpen={setMobileMenuOpen}
+        navigate={navigate}
+        cartCount={cartCount}
+        setCartDrawerOpen={setCartDrawerOpen}
+        handleLogout={handleLogout}
+      />
 
       <Drawer
         title="User Menu"
@@ -835,21 +886,12 @@ export default function UserApp() {
                 </Space>
                 <div className="h-scroll-chips">
                   {categories.map((c) => (
-                    <button
+                    <CategoryPill
                       key={c._id}
-                      type="button"
-                      className={`chip-btn ${selectedCategory === c._id ? 'active' : ''}`}
+                      category={c}
+                      active={selectedCategory === c._id}
                       onClick={() => setSelectedCategory(c._id)}
-                    >
-                      <span className="chip-media" aria-hidden="true">
-                        {c.image ? (
-                          <img src={c.image} alt={c.name} className="chip-image" />
-                        ) : (
-                          <span className="chip-fallback">{(c.name || 'C').slice(0, 1).toUpperCase()}</span>
-                        )}
-                      </span>
-                      <span>{c.name}</span>
-                    </button>
+                    />
                   ))}
                 </div>
               </Space>
@@ -876,41 +918,21 @@ export default function UserApp() {
               {selectedCategoryObj?.name || 'Selected category'} items
             </Typography.Title>
             <div className="h-scroll-list" style={{ marginBottom: 14 }}>
-              {filteredProducts.map((product) => (
-                <div className="h-scroll-card user-product-card" key={product._id}>
-                  <div className="user-product-image-wrap">
-                    {product.image ? (
-                      <img
-                        className="user-product-image"
-                        src={product.image}
-                        alt={product.name}
-                        onError={(e) => {
-                          e.currentTarget.src = FALLBACK_FOOD_IMAGE;
-                        }}
-                      />
-                    ) : (
-                      <img className="user-product-image" src={FALLBACK_FOOD_IMAGE} alt={product.name || 'Item'} />
-                    )}
-                  </div>
-                  <div style={{ padding: 10 }}>
-                    <Typography.Text strong className="user-item-name">{product.name}</Typography.Text>
-                    <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ minHeight: 36, marginBottom: 8 }}>
-                      {product.description || 'Delicious item'}
-                    </Typography.Paragraph>
-                    <Space style={{ width: '100%', justifyContent: 'space-between' }}>
-                      <Typography.Text strong>₹{product.price}</Typography.Text>
-                      <Space size={6}>
-                        <Button size="small" onClick={() => navigate(`/user/food/${product._id}`)}>
-                          View
-                        </Button>
-                        <Button type="primary" size="small" onClick={() => onAddToCart(product._id)}>
-                          {cartQtyMap[product._id] ? `Add (${cartQtyMap[product._id]})` : 'Add'}
-                        </Button>
-                      </Space>
-                    </Space>
-                  </div>
-                </div>
-              ))}
+              {filteredProducts.map((product) => {
+                const qty = cartQtyMap[product._id] || 0;
+                const cartItem = cart.items.find((i) => (i.productId?._id || i.productId) === product._id);
+                return (
+                  <FoodCard
+                    key={product._id}
+                    p={product}
+                    quantity={qty}
+                    onAdd={() => qty > 0 ? onUpdateCartItem(cartItem, 1) : onAddToCart(product._id)}
+                    onRemove={() => onUpdateCartItem(cartItem, -1)}
+                    navigate={navigate}
+                    className="h-scroll-card"
+                  />
+                );
+              })}
             </div>
             {!filteredProducts.length && !loading && <Empty style={{ marginTop: 36 }} description="No items found" />}
             <div className="user-app-explore-footer">
@@ -1257,6 +1279,81 @@ export default function UserApp() {
       </Drawer>
 
       <Modal
+        title="Confirm Delivery Address"
+        open={addressConfirmModalOpen}
+        onCancel={() => setAddressConfirmModalOpen(false)}
+        footer={null}
+      >
+        <div style={{ padding: '12px 0' }}>
+          {selectedAddressObj ? (
+            <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border)', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '16px' }}>📍</span>
+                <Typography.Text strong style={{ fontSize: '15px' }}>
+                  {selectedAddressObj.title || 'Delivery Address'}
+                </Typography.Text>
+              </div>
+              <Typography.Paragraph style={{ margin: 0, color: 'var(--text-secondary)' }}>
+                {selectedAddressObj.addressLine1}
+                {selectedAddressObj.addressLine2 && `, ${selectedAddressObj.addressLine2}`}
+                {selectedAddressObj.landmark && ` (Landmark: ${selectedAddressObj.landmark})`}
+                {`, ${selectedAddressObj.city}, ${selectedAddressObj.state} - ${selectedAddressObj.pincode}`}
+              </Typography.Paragraph>
+            </div>
+          ) : (
+            <div style={{ padding: '24px', textAlign: 'center', border: '1px dashed var(--border)', borderRadius: '12px', marginBottom: '16px' }}>
+              <Typography.Paragraph type="secondary" style={{ marginBottom: '16px' }}>
+                No delivery address selected or available. Please add an address to continue.
+              </Typography.Paragraph>
+              <Button type="primary" icon={<PlusOutlined />} onClick={() => { setAddressConfirmModalOpen(false); openAddAddress(); }}>
+                Add Address
+              </Button>
+            </div>
+          )}
+
+          {addresses.length > 1 && (
+            <div style={{ marginBottom: '20px' }}>
+              <Typography.Text type="secondary" style={{ display: 'block', marginBottom: '8px', fontSize: '13px' }}>
+                Deliver to another address:
+              </Typography.Text>
+              <Radio.Group
+                onChange={(e) => setSelectedAddressId(e.target.value)}
+                value={selectedAddressId}
+                style={{ width: '100%' }}
+              >
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  {addresses.filter(a => a._id !== selectedAddressId).map(a => (
+                    <Radio key={a._id} value={a._id}>
+                      <span style={{ color: 'var(--text-primary)' }}>{a.title} ({a.addressLine1.slice(0, 30)}...)</span>
+                    </Radio>
+                  ))}
+                </Space>
+              </Radio.Group>
+            </div>
+          )}
+
+          {selectedAddressObj && (
+            <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+              <Button style={{ flex: 1 }} onClick={() => { setAddressConfirmModalOpen(false); openAddAddress(); }}>
+                Add New Address
+              </Button>
+              <Button
+                type="primary"
+                style={{ flex: 2 }}
+                loading={checkoutLoading}
+                onClick={async () => {
+                  setAddressConfirmModalOpen(false);
+                  await executePlaceOrder();
+                }}
+              >
+                Confirm & Place Order
+              </Button>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
         title="Order Details"
         open={orderDetailsModalOpen}
         onCancel={() => {
@@ -1289,6 +1386,30 @@ export default function UserApp() {
                 {selectedOrderDetails.status || 'CREATED'}
               </Tag>
             </div>
+
+            {selectedOrderDetails.deliveryOTP?.code && 
+             ['ASSIGNED_TO_DELIVERY', 'PICKED_UP', 'OUT_FOR_DELIVERY', 'ARRIVED_AT_LOCATION'].includes(selectedOrderDetails.status) && (
+              <Card 
+                size="small" 
+                style={{ 
+                  background: 'rgba(16, 185, 129, 0.08)', 
+                  border: '1px solid rgba(16, 185, 129, 0.2)',
+                  borderRadius: 12,
+                  textAlign: 'center',
+                  padding: '16px 8px'
+                }}
+              >
+                <Typography.Text type="secondary" style={{ fontSize: 12, display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em', color: '#10b981' }}>
+                  🔑 Delivery Verification OTP
+                </Typography.Text>
+                <div style={{ fontSize: 32, fontWeight: 800, color: '#10b981', letterSpacing: 6, margin: '8px 0 4px 6px' }}>
+                  {selectedOrderDetails.deliveryOTP.code}
+                </div>
+                <Typography.Paragraph type="secondary" style={{ fontSize: 11, margin: 0, color: '#64748b' }}>
+                  Please share this code with the delivery rider upon arrival to collect your order.
+                </Typography.Paragraph>
+              </Card>
+            )}
             <div className="order-details-grid">
               <div>
                 <Typography.Text type="secondary">Placed On</Typography.Text>

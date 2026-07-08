@@ -16,13 +16,15 @@ const { createReviewSchema } = require("../validators/reviewValidator");
 router.get("/categories", userController.getCategories);
 router.get("/products", userController.getProducts);
 
-// All routes require authentication and USER role
+// All routes require authentication
 router.use(auth);
-router.use(roleCheck("USER","CUSTOMER"));
 
 // Profile
 router.get("/profile", userController.getProfile);
 router.put("/profile", validate(updateProfileSchema), userController.updateProfile);
+
+// Enforce USER/CUSTOMER roles for subsequent customer routes
+router.use(roleCheck("USER","CUSTOMER"));
 router.post("/profile/coins", userController.updateCoins);
 
 // Addresses

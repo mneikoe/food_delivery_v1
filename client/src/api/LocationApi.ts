@@ -12,6 +12,11 @@ export const updateUserLocation = async (
     throw new Error("Authentication required. Please log in.");
   }
 
+  if (userRole === "ADMIN") {
+    console.log("Skipping location DB update for ADMIN role.");
+    return;
+  }
+
   const coords = await getCurrentLocation();
 
   // Determine API endpoint based on user role

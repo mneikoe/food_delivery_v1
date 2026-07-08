@@ -155,12 +155,15 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
     setLoading(true);
     try {
       console.log('📦 Fetching order details for:', orderId);
-      const response = await api.get(`/user/orders/${orderId}`);
+      const endpoint = user?.role === 'ADMIN'
+        ? `/admin/orders/${orderId}`
+        : `/user/orders/${orderId}`;
+      const response = await api.get(endpoint);
       console.log('✅ Order details fetched successfully');
       setOrder(response.data);
       
-      // Fetch reviews if order is delivered
-      if (response.data.status === 'DELIVERED' && response.data.items) {
+      // Fetch reviews if order is delivered and user is not admin
+      if (response.data.status === 'DELIVERED' && response.data.items && user?.role !== 'ADMIN') {
         fetchProductReviews(response.data.items);
       }
     } catch (error: any) {

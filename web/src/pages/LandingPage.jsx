@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { message } from 'antd';
-import { addUserCartItem, getUserCart, getUserCategories, getUserProducts } from '../api/userApi';
+import { addUserCartItem, getUserCart, getUserCategories, getUserProducts, getPublicHeroSlides } from '../api/userApi';
 import logoImage from '../assets/logo-chatora.png';
+import CategoryPill from '../components/user/CategoryPill';
+import FoodCard from '../components/user/FoodCard';
 import './LandingPage.css';
 
 const FALLBACK = 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=800&auto=format&fit=crop';
@@ -17,7 +19,32 @@ export default function LandingPage() {
   const [loading, setLoading] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
   const [addingId, setAddingId] = useState(null);
+  const [heroSlides, setHeroSlides] = useState([]);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const isLoggedIn = Boolean(localStorage.getItem('user_token'));
+
+  useEffect(() => {
+    loadMenu();
+    // Load hero slides
+    const loadSlides = async () => {
+      try {
+        const res = await getPublicHeroSlides();
+        if (res.data?.slides && res.data.slides.length > 0) {
+          setHeroSlides(res.data.slides);
+        }
+      } catch (_) {}
+    };
+    loadSlides();
+  }, []);
+
+  // Auto rotate hero slides every 4s
+  useEffect(() => {
+    if (heroSlides.length <= 1) return;
+    const t = setInterval(() => {
+      setCurrentSlideIndex((prev) => (prev + 1) % heroSlides.length);
+    }, 4000);
+    return () => clearInterval(t);
+  }, [heroSlides]);
 
   useEffect(() => {
     loadMenu();
@@ -149,11 +176,17 @@ export default function LandingPage() {
               Now serving online · Fast delivery
             </div>
             <h1 className="lp-hero-title">
-              Cravings?<br />
-              <span className="lp-hero-accent">We've got you.</span>
+              {heroSlides[currentSlideIndex]?.headline ? (
+                heroSlides[currentSlideIndex].headline
+              ) : (
+                <>
+                  Cravings?<br />
+                  <span className="lp-hero-accent">We've got you.</span>
+                </>
+              )}
             </h1>
             <p className="lp-hero-desc">
-              Order from our freshly curated menu — biryani, burgers, chai, and so much more. Delivered hot to your doorstep.
+              {heroSlides[currentSlideIndex]?.text || 'Order from our freshly curated menu — biryani, burgers, chai, and so much more. Delivered hot to your doorstep.'}
             </p>
             <div className="lp-hero-actions">
               <button className="lp-cta-primary" onClick={() => navigate(isLoggedIn ? '/user/app' : '/user/login')}>
@@ -177,9 +210,11 @@ export default function LandingPage() {
           <div className="lp-hero-image-wrap">
             <div className="lp-hero-image-ring" />
             <img
-              src="https://images.unsplash.com/photo-1504674900247-0877df9cc836?q=80&w=800&auto=format&fit=crop"
+              src={heroSlides[currentSlideIndex]?.image || "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=800&auto=format&fit=crop"}
               alt="Delicious food spread"
               className="lp-hero-image"
+              key={currentSlideIndex}
+              style={{ animation: 'lpFadeIn 0.6s ease-in-out' }}
               onError={e => e.currentTarget.src = FALLBACK}
             />
             <div className="lp-hero-float-1">⭐ 4.9 Rating</div>
@@ -222,17 +257,12 @@ export default function LandingPage() {
             {loading && !categories.length
               ? [1,2,3,4].map(i => <div key={i} className="lp-cat-pill lp-skeleton" style={{ width: 90 }} />)
               : categories.map(cat => (
-                <button
+                <CategoryPill
                   key={cat._id}
-                  className={`lp-cat-pill ${selectedCat === cat._id ? 'active' : ''}`}
+                  category={cat}
+                  active={selectedCat === cat._id}
                   onClick={() => setSelectedCat(cat._id)}
-                >
-                  {cat.image
-                    ? <img src={cat.image} alt={cat.name} className="lp-cat-pill-img" onError={e => e.currentTarget.style.display='none'} />
-                    : <span className="lp-cat-pill-emoji">{cat.name.slice(0, 1)}</span>
-                  }
-                  {cat.name}
-                </button>
+                />
               ))
             }
           </div>
@@ -242,39 +272,14 @@ export default function LandingPage() {
             {loading && !filtered.length
               ? [1,2,3,4,5,6].map(i => <div key={i} className="lp-food-card lp-skeleton" style={{ height: 310 }} />)
               : filtered.map(food => (
-                <div key={food._id} className="lp-food-card">
-                  <div className="lp-food-img-wrap">
-                    <img
-                      src={food.image || FALLBACK}
-                      alt={food.name}
-                      className="lp-food-img"
-                      onError={e => e.currentTarget.src = FALLBACK}
-                    />
-                    {food.isVeg !== undefined && (
-                      <div className={`lp-veg-badge ${food.isVeg ? 'veg' : 'nonveg'}`}>
-                        {food.isVeg ? '🟢' : '🔴'}
-                      </div>
-                    )}
-                  </div>
-                  <div className="lp-food-body">
-                    <div className="lp-food-name">{food.name}</div>
-                    <div className="lp-food-desc">{food.description || 'A delicious treat'}</div>
-                    <div className="lp-food-footer">
-                      <div className="lp-food-price">₹{food.price}</div>
-                      <button
-                        className={`lp-add-btn ${cartMap[food._id] ? 'in-cart' : ''} ${addingId === food._id ? 'loading' : ''}`}
-                        onClick={() => handleAddToCart(food._id)}
-                        disabled={addingId === food._id}
-                      >
-                        {addingId === food._id
-                          ? '...'
-                          : cartMap[food._id]
-                          ? `✓ ${cartMap[food._id]} Added`
-                          : '+ Add'}
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <FoodCard
+                  key={food._id}
+                  p={food}
+                  quantity={cartMap[food._id] || 0}
+                  onAdd={() => handleAddToCart(food._id)}
+                  onRemove={() => navigate('/user/login')}
+                  navigate={navigate}
+                />
               ))
             }
           </div>

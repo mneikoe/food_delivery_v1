@@ -1,16 +1,12 @@
-// Supabase is no longer used for authentication.
-// Auth is now handled via Nodemailer OTP + custom JWT (see authService.js)
-// This file is kept as a stub to avoid breaking any remaining imports.
+const { createClient } = require("@supabase/supabase-js");
 
-const supabase = {
+const supabaseUrl = 'https://gclpmnclxvgqoiedguoc.supabase.co';
+const supabaseKey = 'sb_publishable_go4YUYbWiKeTn0X8cfSOZQ_kZdm2dA6';
+
+const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
-    signInWithOtp: async () => {
-      throw new Error("Supabase auth is deprecated. Use /api/auth/send-email-otp instead.");
-    },
-    verifyOtp: async () => {
-      throw new Error("Supabase auth is deprecated. Use /api/auth/verify-email-otp instead.");
-    },
+    persistSession: false,
   },
-};
+});
 
 module.exports = supabase;

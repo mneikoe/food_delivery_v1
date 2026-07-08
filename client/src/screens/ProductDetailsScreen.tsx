@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Dimensions,
   StatusBar,
+  FlatList,
 } from 'react-native';
 import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
@@ -38,11 +39,27 @@ export default function ProductDetailsScreen({ route }: any) {
   // Use isVeg directly from backend data
   const isVeg = item.isVeg !== undefined ? item.isVeg : true;
 
+  const [otherProducts, setOtherProducts] = useState<any[]>([]);
+
   useEffect(() => {
     if (token && item._id) {
       fetchReviews();
+      fetchOtherProducts();
     }
   }, [token, item._id]);
+
+  const fetchOtherProducts = async () => {
+    try {
+      const response = await api.get('/user/products');
+      const allProds = response.data || [];
+      const filtered = allProds.filter((p: any) => p._id !== item._id);
+      setOtherProducts(filtered);
+    } catch (error) {
+      console.error('Failed to fetch other products:', error);
+    }
+  };
+
+
 
   const fetchReviews = async () => {
     setLoadingReviews(true);
@@ -170,19 +187,6 @@ export default function ProductDetailsScreen({ route }: any) {
           {/* Badge & Title Card */}
           <View style={styles.titleCard}>
             <View style={styles.badgeContainer}>
-              <View style={[styles.badge, isVeg ? styles.vegBadge : styles.nonVegBadge]}>
-                <View style={[styles.badgeIcon, isVeg ? styles.vegIcon : styles.nonVegIcon]}>
-                  {isVeg ? (
-                    <Ionicons name="leaf" size={12} color="#00a868" />
-                  ) : (
-                    <Text style={styles.nonVegIconText}>•</Text>
-                  )}
-                </View>
-                <Text style={[styles.badgeText, isVeg ? styles.vegText : styles.nonVegText]}>
-                  {isVeg ? 'Veg' : 'Non-Veg'}
-                </Text>
-              </View>
-            
               {item.preparationTime && (
                 <View style={[styles.badge, styles.prepTimeBadge]}>
                   <Ionicons name="time-outline" size={12} color={tokens.colors.primary} />
@@ -282,6 +286,46 @@ export default function ProductDetailsScreen({ route }: any) {
               </View>
             )}
           </View>
+
+          {otherProducts.length > 0 && (
+            <View style={styles.footerSection}>
+              <Text style={styles.footerTitle}>Explore Other Delicious Dishes</Text>
+              <FlatList
+                horizontal
+                data={otherProducts}
+                keyExtractor={(prod) => 'other_' + prod._id}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.horizontalList}
+                renderItem={({ item: prod }) => (
+                  <View style={styles.otherCard}>
+                    <TouchableOpacity 
+                      onPress={() => {
+                        (navigation as any).navigate('ProductDetails', { item: prod });
+                      }} 
+                      activeOpacity={0.9}
+                    >
+                      <Image
+                        source={prod.image ? { uri: prod.image } : require('../assets/placeholder.png')}
+                        style={styles.otherImage}
+                      />
+                    </TouchableOpacity>
+                    <View style={styles.otherInfo}>
+                      <Text style={styles.otherName} numberOfLines={1}>{prod.name}</Text>
+                      <Text style={styles.otherPrice}>₹{prod.price}</Text>
+                      <TouchableOpacity
+                         style={styles.viewBtn}
+                         onPress={() => {
+                           (navigation as any).navigate('ProductDetails', { item: prod });
+                         }}
+                      >
+                         <Text style={styles.viewBtnText}>View Details</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              />
+            </View>
+          )}
 
           {/* Spacer for bottom action bar */}
           <View style={styles.bottomSpacer} />
@@ -603,7 +647,7 @@ const getStyles = (colors: any, tokens: any) => StyleSheet.create({
     color: colors.textSecondary,
   },
   bottomSpacer: {
-    height: 120,
+    height: 40,
   },
   bottomActionBar: {
     position: 'absolute',
@@ -677,5 +721,76 @@ const getStyles = (colors: any, tokens: any) => StyleSheet.create({
   },
   addToCartButtonDisabled: {
     opacity: 0.7,
+  },
+  footerSection: {
+    marginTop: 24,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingBottom: 20,
+  },
+  footerTitle: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 16,
+    paddingHorizontal: 24,
+  },
+  horizontalList: {
+    paddingHorizontal: 24,
+  },
+  otherCard: {
+    width: 140,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
+    elevation: 2,
+    marginRight: 16,
+  },
+  otherImage: {
+    width: '100%',
+    height: 90,
+    backgroundColor: colors.background,
+  },
+  otherInfo: {
+    padding: 10,
+  },
+  otherName: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  otherPrice: {
+    fontFamily: 'PlusJakartaSans-SemiBold',
+    fontSize: 12,
+    color: tokens.colors.primary,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  otherActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  viewBtn: {
+    backgroundColor: tokens.colors.primary,
+    borderRadius: 8,
+    paddingVertical: 6,
+    alignItems: 'center',
+    width: '100%',
+  },
+  viewBtnText: {
+    fontFamily: 'PlusJakartaSans-Bold',
+    fontSize: 11,
+    color: tokens.colors.white,
+    fontWeight: '700',
   },
 });

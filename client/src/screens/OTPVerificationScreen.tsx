@@ -37,12 +37,8 @@ export default function OTPVerificationScreen() {
     setLoading(true);
     try {
       await api.post(`/delivery/orders/${orderId}/verify-otp`, { otp });
-      showAlert('Success', 'OTP verified! Order marked as delivered.', [
-        {
-          text: 'OK',
-          onPress: () => navigation.navigate('App' as never),
-        },
-      ]);
+      showAlert('Success', 'OTP verified! Order marked as delivered.');
+      navigation.navigate('App' as never);
     } catch (error: any) {
       showAlert('Error', error.response?.data?.error || 'Invalid OTP. Please try again.');
     } finally {

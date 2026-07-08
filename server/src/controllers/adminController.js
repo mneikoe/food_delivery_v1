@@ -4,6 +4,7 @@ const Coupon = require("../models/Coupon");
 const Offer = require("../models/Offer");
 const Order = require("../models/Order");
 const User = require("../models/User");
+const bcrypt = require("bcryptjs");
 const orderService = require("../services/orderService");
 const { logAudit } = require("../utils/auditLogger");
 const GameEconomySettings = require("../models/GameEconomySettings");
@@ -254,6 +255,7 @@ exports.getAllOrders = async (req, res) => {
     const orders = await Order.find(filter)
       .populate("userId", "name phone")
       .populate("deliveryPartnerId", "name phone")
+      .populate("items.productId", "name image price")
       .sort({ createdAt: -1 });
 
     res.json(orders);
@@ -396,6 +398,68 @@ exports.createDeliveryPartner = async (req, res) => {
       role: deliveryPartner.role,
       isActive: deliveryPartner.isActive,
       createdAt: deliveryPartner.createdAt,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.verifyAndCreateDeliveryPartner = async (req, res) => {
+  try {
+    const { name, email, phone, otp } = req.body;
+
+    if (!name || !email || !otp) {
+      return res.status(400).json({ error: "Name, email, and OTP are required" });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Find the user document that has the OTP
+    const user = await User.findOne({ email: normalizedEmail });
+    if (!user) {
+      return res.status(404).json({ error: "No verification request found for this email" });
+    }
+
+    // Verify OTP expiry
+    if (!user.otpExpiry || new Date() > new Date(user.otpExpiry)) {
+      return res.status(400).json({ error: "OTP has expired. Please send a new one." });
+    }
+
+    // Verify OTP attempts limit
+    if (user.otpAttempts >= 5) {
+      return res.status(400).json({ error: "Too many failed attempts. Please request a new OTP." });
+    }
+
+    // Verify OTP hash
+    const isMatch = await bcrypt.compare(otp, user.otpHash || "");
+    if (!isMatch) {
+      user.otpAttempts = (user.otpAttempts || 0) + 1;
+      await user.save();
+      return res.status(400).json({ error: "Invalid verification code" });
+    }
+
+    // OTP verified! Now register/promote to DELIVERY_PARTNER
+    user.name = name.trim();
+    user.phone = phone.trim();
+    user.role = "DELIVERY_PARTNER";
+    user.isActive = true;
+    user.supabaseId = user.supabaseId || `delivery_${Date.now()}`;
+    
+    // Clear OTP fields
+    user.otpHash = undefined;
+    user.otpExpiry = undefined;
+    user.otpAttempts = 0;
+
+    await user.save();
+
+    res.status(200).json({
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
     });
   } catch (error) {
     res.status(400).json({ error: error.message });

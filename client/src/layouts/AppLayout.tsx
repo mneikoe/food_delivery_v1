@@ -3,6 +3,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import AppHeader from "../components/AppHeader";
 import BottomTabs from "../navigation/BottomTabs";
 import DeliveryBottomTabs from "../navigation/DeliveryBottomTabs";
+import AdminBottomTabs from "../navigation/AdminBottomTabs";
 import NameInputModal from "../components/NameInputModal";
 
 import { useAuth } from "../context/AuthContext";
@@ -15,6 +16,7 @@ export default function AppLayout() {
   const { user, showNameModal, setShowNameModal, refreshUser } = useAuth();
   const { setLocation, location } = useLocation();
   const isDeliveryPartner = user?.role === "DELIVERY_PARTNER";
+  const isAdmin = user?.role === "ADMIN";
   const locationAttempted = useRef(false);
   const { colors, tokens, isDark } = useTheme();
   const styles = getStyles(colors, tokens, isDark);
@@ -42,7 +44,13 @@ export default function AppLayout() {
 
       {/* 📱 APP CONTENT - Role-based tabs */}
       <View style={styles.content}>
-        {isDeliveryPartner ? <DeliveryBottomTabs /> : <BottomTabs />}
+        {isAdmin ? (
+          <AdminBottomTabs />
+        ) : isDeliveryPartner ? (
+          <DeliveryBottomTabs />
+        ) : (
+          <BottomTabs />
+        )}
       </View>
 
       {/* Name Input Modal */}

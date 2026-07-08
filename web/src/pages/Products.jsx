@@ -103,12 +103,6 @@ export default function Products() {
       key: 'category',
     },
     {
-      title: 'Veg',
-      dataIndex: 'isVeg',
-      key: 'isVeg',
-      render: (isVeg) => (isVeg ? 'Yes' : 'No'),
-    },
-    {
       title: 'Available',
       dataIndex: 'isAvailable',
       key: 'isAvailable',
@@ -202,7 +196,7 @@ export default function Products() {
           <Form.Item name="image" label="Image URL">
             <Input />
           </Form.Item>
-          <Form.Item name="isVeg" label="Vegetarian" valuePropName="checked" initialValue={true}>
+          <Form.Item name="isVeg" valuePropName="checked" initialValue={true} hidden>
             <Switch />
           </Form.Item>
           <Form.Item name="isAvailable" label="Available" valuePropName="checked" initialValue={true}>

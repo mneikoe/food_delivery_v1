@@ -53,6 +53,10 @@ router.post(
   "/delivery-partners",
   adminController.createDeliveryPartner
 );
+router.post(
+  "/delivery-partners/verify",
+  adminController.verifyAndCreateDeliveryPartner
+);
 router.put(
   "/delivery-partners/:id",
   adminController.updateDeliveryPartner

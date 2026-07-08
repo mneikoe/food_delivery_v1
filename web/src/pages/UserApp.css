@@ -175,8 +175,18 @@
   color: var(--text-primary) !important;
 }
 
+.user-app-content .ant-btn-default {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
 .user-app-content .ant-btn-default span {
-  color: #1e293b !important;
+  color: var(--text-primary) !important;
+}
+
+.user-app-content .ant-btn-default:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 
 .user-app-content .ant-btn-primary span {

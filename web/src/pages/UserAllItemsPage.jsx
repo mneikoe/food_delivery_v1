@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeftOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import { Badge, Button, Card, Empty, Input, Space, Typography, message } from 'antd';
-import { addUserCartItem, getUserCart, getUserCategories, getUserProducts } from '../api/userApi';
+import { addUserCartItem, getUserCart, getUserCategories, getUserProducts, updateUserCartItem } from '../api/userApi';
+import CategoryPill from '../components/user/CategoryPill';
+import FoodCard from '../components/user/FoodCard';
 import './UserApp.css';
 
 const FALLBACK_FOOD_IMAGE =
@@ -76,6 +78,17 @@ export default function UserAllItemsPage() {
     }
   };
 
+  const onUpdateQuantity = async (productId, delta) => {
+    const nextQty = (cartQtyMap[productId] || 0) + delta;
+    try {
+      await updateUserCartItem(productId, { quantity: nextQty });
+      setCartQtyMap((prev) => ({ ...prev, [productId]: nextQty }));
+      setCartCount((prev) => prev + delta);
+    } catch (error) {
+      message.error('Unable to update cart');
+    }
+  };
+
   return (
     <div className="user-app-shell">
       <div className="user-app-content user-catalog-content">
@@ -102,32 +115,18 @@ export default function UserAllItemsPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
               <div className="h-scroll-chips">
-                <button
-                  type="button"
-                  className={`chip-btn ${selectedCategory === 'all' ? 'active' : ''}`}
+                <CategoryPill
+                  category={{ name: 'All Items' }}
+                  active={selectedCategory === 'all'}
                   onClick={() => setSelectedCategory('all')}
-                >
-                  <span className="chip-media">
-                    <span className="chip-fallback">A</span>
-                  </span>
-                  <span>All Items</span>
-                </button>
+                />
                 {categories.map((category) => (
-                  <button
+                  <CategoryPill
                     key={category._id}
-                    type="button"
-                    className={`chip-btn ${selectedCategory === category._id ? 'active' : ''}`}
+                    category={category}
+                    active={selectedCategory === category._id}
                     onClick={() => setSelectedCategory(category._id)}
-                  >
-                    <span className="chip-media">
-                      {category.image ? (
-                        <img src={category.image} alt={category.name} className="chip-image" />
-                      ) : (
-                        <span className="chip-fallback">{(category.name || 'C').slice(0, 1).toUpperCase()}</span>
-                      )}
-                    </span>
-                    <span>{category.name}</span>
-                  </button>
+                  />
                 ))}
               </div>
             </Space>
@@ -140,44 +139,19 @@ export default function UserAllItemsPage() {
             </Card>
           ) : (
             <div className="user-menu-grid">
-              {filteredProducts.map((item) => (
-                <Card
-                  key={item._id}
-                  className="user-item-grid-card"
-                  cover={
-                    item.image ? (
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="user-grid-card-image"
-                        onError={(e) => {
-                          e.currentTarget.src = FALLBACK_FOOD_IMAGE;
-                        }}
-                      />
-                    ) : (
-                      <img src={FALLBACK_FOOD_IMAGE} alt={item.name || 'Item'} className="user-grid-card-image" />
-                    )
-                  }
-                >
-                  <Typography.Text strong className="user-item-name">
-                    {item.name}
-                  </Typography.Text>
-                  <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ marginTop: 8 }}>
-                    {item.description || 'Freshly prepared item.'}
-                  </Typography.Paragraph>
-                  <div className="user-item-grid-footer">
-                    <Typography.Text strong>₹{item.price}</Typography.Text>
-                    <Space size={8}>
-                      <Button size="small" onClick={() => navigate(`/user/food/${item._id}`)}>
-                        View
-                      </Button>
-                      <Button type="primary" size="small" onClick={() => onAddToCart(item._id)}>
-                        {cartQtyMap[item._id] ? `Add (${cartQtyMap[item._id]})` : 'Add'}
-                      </Button>
-                    </Space>
-                  </div>
-                </Card>
-              ))}
+              {filteredProducts.map((item) => {
+                const qty = cartQtyMap[item._id] || 0;
+                return (
+                  <FoodCard
+                    key={item._id}
+                    p={item}
+                    quantity={qty}
+                    onAdd={() => qty > 0 ? onUpdateQuantity(item._id, 1) : onAddToCart(item._id)}
+                    onRemove={() => onUpdateQuantity(item._id, -1)}
+                    navigate={navigate}
+                  />
+                );
+              })}
             </div>
           )}
         </Space>

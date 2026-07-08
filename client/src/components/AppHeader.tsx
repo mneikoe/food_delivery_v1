@@ -52,55 +52,57 @@ export default function AppHeader({
         </View>
 
         {/* Location Info */}
-        <View style={styles.infoSection}>
-          {/* Location with Icon */}
-          <View style={styles.locationContainer}>
-            <Ionicons 
-              name="location-outline" 
-              size={scale(14)} 
-              color={colors.textSecondary} 
-              style={styles.locationIcon}
-            />
-            {location?.suburb && location.suburb.trim() ? (
-              <Text 
-                style={[
-                  styles.locationText,
-                  isSmallScreen && styles.locationTextSmall,
-                  isLargeScreen && styles.locationTextLarge
-                ]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {location.suburb}
-                {location.city && location.city.trim() && location.suburb !== location.city && (
-                  <Text style={styles.locationSeparator}> • {location.city}</Text>
-                )}
-              </Text>
-            ) : location?.city && location.city.trim() ? (
-              <Text 
-                style={[
-                  styles.locationText,
-                  isSmallScreen && styles.locationTextSmall,
-                  isLargeScreen && styles.locationTextLarge
-                ]}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {location.city}
-              </Text>
-            ) : (
-              <Text 
-                style={[
-                  styles.locationText,
-                  isSmallScreen && styles.locationTextSmall,
-                  isLargeScreen && styles.locationTextLarge
-                ]}
-              >
-                Detecting location...
-              </Text>
-            )}
+        {user?.role !== 'ADMIN' && (
+          <View style={styles.infoSection}>
+            {/* Location with Icon */}
+            <View style={styles.locationContainer}>
+              <Ionicons 
+                name="location-outline" 
+                size={scale(14)} 
+                color={colors.textSecondary} 
+                style={styles.locationIcon}
+              />
+              {location?.suburb && location.suburb.trim() ? (
+                <Text 
+                  style={[
+                    styles.locationText,
+                    isSmallScreen && styles.locationTextSmall,
+                    isLargeScreen && styles.locationTextLarge
+                  ]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {location.suburb}
+                  {location.city && location.city.trim() && location.suburb !== location.city && (
+                    <Text style={styles.locationSeparator}> • {location.city}</Text>
+                  )}
+                </Text>
+              ) : location?.city && location.city.trim() ? (
+                <Text 
+                  style={[
+                    styles.locationText,
+                    isSmallScreen && styles.locationTextSmall,
+                    isLargeScreen && styles.locationTextLarge
+                  ]}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {location.city}
+                </Text>
+              ) : (
+                <Text 
+                  style={[
+                    styles.locationText,
+                    isSmallScreen && styles.locationTextSmall,
+                    isLargeScreen && styles.locationTextLarge
+                  ]}
+                >
+                  Detecting location...
+                </Text>
+              )}
+            </View>
           </View>
-        </View>
+        )}
       </View>
 
       {/* Divider Line - Only visible on larger screens */}
