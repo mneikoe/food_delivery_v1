@@ -1415,7 +1415,7 @@ export default function UserApp() {
             <div className="order-details-grid">
               <div>
                 <Typography.Text type="secondary">Placed On</Typography.Text>
-                <Typography.Paragraph style={{ marginBottom: 0 }}>
+                <Typography.Paragraph style={{ marginBottom: 0, fontWeight: 500 }}>
                   {selectedOrderDetails.createdAt
                     ? dayjs(selectedOrderDetails.createdAt).format('YYYY-MM-DD HH:mm')
                     : '-'}
@@ -1423,14 +1423,14 @@ export default function UserApp() {
               </div>
               <div>
                 <Typography.Text type="secondary">Total Amount</Typography.Text>
-                <Typography.Paragraph style={{ marginBottom: 0, fontWeight: 600 }}>
+                <Typography.Paragraph style={{ marginBottom: 0, fontWeight: 700, color: '#f97316' }}>
                   ₹{selectedOrderDetails.totalAmount || 0}
                 </Typography.Paragraph>
               </div>
               <div>
                 <Typography.Text type="secondary">Payment Method</Typography.Text>
-                <Typography.Paragraph style={{ marginBottom: 0 }}>
-                  {selectedOrderDetails.paymentMethod === 'COD' ? 'Cash on Delivery' : 'Online (Razorpay)'}
+                <Typography.Paragraph style={{ marginBottom: 0, fontWeight: 500 }}>
+                  {selectedOrderDetails.paymentMethod === 'COD' ? '💵 Cash on Delivery' : '💳 Online (Razorpay)'}
                 </Typography.Paragraph>
               </div>
               <div>
@@ -1442,24 +1442,24 @@ export default function UserApp() {
                 </Typography.Paragraph>
               </div>
               {selectedOrderDetails.paymentMethod === 'RAZORPAY' && selectedOrderDetails.razorpayOrderId && (
-                <div>
+                <div style={{ gridColumn: 'span 2' }}>
                   <Typography.Text type="secondary">Razorpay Order ID</Typography.Text>
-                  <Typography.Paragraph style={{ marginBottom: 0, fontSize: 11 }}>
+                  <Typography.Paragraph style={{ marginBottom: 0, fontSize: 12, fontFamily: 'monospace', color: '#38bdf8' }}>
                     {selectedOrderDetails.razorpayOrderId}
                   </Typography.Paragraph>
                 </div>
               )}
               {selectedOrderDetails.paymentMethod === 'RAZORPAY' && selectedOrderDetails.razorpayPaymentId && (
-                <div>
-                  <Typography.Text type="secondary">Transaction ID</Typography.Text>
-                  <Typography.Paragraph style={{ marginBottom: 0, fontSize: 11 }}>
+                <div style={{ gridColumn: 'span 2' }}>
+                  <Typography.Text type="secondary">Transaction ID (Payment ID)</Typography.Text>
+                  <Typography.Paragraph style={{ marginBottom: 0, fontSize: 12, fontFamily: 'monospace', color: '#38bdf8' }}>
                     {selectedOrderDetails.razorpayPaymentId}
                   </Typography.Paragraph>
                 </div>
               )}
-              <div>
-                <Typography.Text type="secondary">Delivery Boy</Typography.Text>
-                <Typography.Paragraph style={{ marginBottom: 0 }}>
+              <div style={{ gridColumn: 'span 2' }}>
+                <Typography.Text type="secondary">Delivery Partner</Typography.Text>
+                <Typography.Paragraph style={{ marginBottom: 0, fontWeight: 500 }}>
                   {formatDeliveryPartner(selectedOrderDetails)}
                 </Typography.Paragraph>
               </div>
