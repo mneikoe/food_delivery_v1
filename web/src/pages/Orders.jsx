@@ -592,6 +592,20 @@ export default function Orders() {
               <Descriptions.Item label="Delivery Fee">₹{selectedOrder.deliveryFee}</Descriptions.Item>
               <Descriptions.Item label="Discount">₹{selectedOrder.discount || 0}</Descriptions.Item>
               <Descriptions.Item label="Total Amount">₹{selectedOrder.totalAmount}</Descriptions.Item>
+              <Descriptions.Item label="Payment Method">
+                {selectedOrder.paymentMethod === 'COD' ? 'Cash on Delivery' : 'Online (Razorpay)'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Payment Status">
+                <Tag color={selectedOrder.paymentStatus === 'PAID' ? 'success' : selectedOrder.paymentStatus === 'FAILED' ? 'error' : 'warning'}>
+                  {selectedOrder.paymentStatus || 'PENDING'}
+                </Tag>
+              </Descriptions.Item>
+              {selectedOrder.paymentMethod === 'RAZORPAY' && (
+                <>
+                  <Descriptions.Item label="Razorpay Order ID">{selectedOrder.razorpayOrderId || 'N/A'}</Descriptions.Item>
+                  <Descriptions.Item label="Transaction ID">{selectedOrder.razorpayPaymentId || 'N/A'}</Descriptions.Item>
+                </>
+              )}
               <Descriptions.Item label="Delivery Partner" span={2}>
                 {selectedOrder.deliveryPartnerId?.name || 'Not assigned'}
               </Descriptions.Item>

@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { key: '/admin/offers', icon: '🏷️', label: 'Offers' },
   { key: '/admin/coupons', icon: '🎟️', label: 'Coupons' },
   { key: '/admin/orders', icon: '📦', label: 'Orders' },
+  { key: '/admin/payments', icon: '💳', label: 'Payments' },
   { key: '/admin/delivery-partners', icon: '🛵', label: 'Delivery Partners' },
   { key: '/admin/push-manager', icon: '🔔', label: 'Push Campaigns' },
   { key: '/admin/app-settings', icon: '⚙️', label: 'App Settings' },

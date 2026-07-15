@@ -22,6 +22,7 @@ import DeliveryPartners from './pages/DeliveryPartners';
 import PushManager from './pages/PushManager';
 import AppSettings from './pages/AppSettings';
 import PrivacyPolicy from './pages/PrivacyPolicy';
+import PaymentDashboard from './pages/PaymentDashboard';
 import UserProtectedRoute from './components/UserProtectedRoute';
 import './App.css';
 
@@ -214,6 +215,7 @@ function App() {
                         <Route path="/coupons" element={<Coupons />} />
                         <Route path="/offers" element={<Offers />} />
                         <Route path="/orders" element={<Orders />} />
+                        <Route path="/payments" element={<PaymentDashboard />} />
                         <Route path="/delivery-partners" element={<DeliveryPartners />} />
                         <Route path="/push-manager" element={<PushManager />} />
                         <Route path="/app-settings" element={<AppSettings />} />

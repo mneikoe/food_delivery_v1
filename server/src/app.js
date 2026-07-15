@@ -44,7 +44,14 @@ app.post(
   adminController.uploadApk
 );
 
-app.use(express.json());
+// Exclude payment webhook from global JSON parsing to let express.raw parse it correctly in routes
+app.use((req, res, next) => {
+  if (req.originalUrl === '/api/payment/webhook') {
+    next();
+  } else {
+    express.json()(req, res, next);
+  }
+});
 app.use(mongoSanitize());
 
 // Rate limiting - Configured for proxy environment

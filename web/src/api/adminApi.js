@@ -158,4 +158,9 @@ export const updateMission = (id, data) => api.put(`/admin/gamification/missions
 export const deleteMission = (id) => api.delete(`/admin/gamification/missions/${id}`);
 export const getCoinTransactions = () => api.get('/admin/gamification/transactions');
 
+// Payments Monitoring Panel
+export const getPaymentDashboard = () => api.get('/payment/admin/dashboard');
+export const getPaymentLogs = (params) => api.get('/payment/admin/logs', { params });
+export const getPaymentTimeline = (id) => api.get(`/payment/admin/timeline/${id}`);
+
 export default api;

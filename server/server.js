@@ -20,6 +20,10 @@ mongoose
     // 5 min timeout for large APK uploads (61MB+)
     server.timeout = 300000;
 
+    // Initialize Socket.io
+    const socketConfig = require("./src/config/socket");
+    socketConfig.init(server);
+
     // Start daily gamification streak reminder cron
     const streakReminderService = require("./src/services/streakReminderService");
     streakReminderService.initStreakReminderCron();

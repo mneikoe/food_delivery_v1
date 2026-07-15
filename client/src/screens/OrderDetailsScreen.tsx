@@ -525,19 +525,42 @@ export default function OrderDetailsScreen({ route, navigation }: any) {
         </View>
       </View>
 
-      {/* Payment Method */}
+      {/* Payment Details */}
       {order.paymentMethod && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Payment Method</Text>
+          <Text style={styles.sectionTitle}>Payment Details</Text>
           <View style={styles.paymentContainer}>
             <Ionicons 
-              name="cash-outline" 
+              name={order.paymentMethod === 'COD' ? "cash-outline" : "card-outline"} 
               size={scale(20)} 
               color={tokens.colors.primary} 
             />
             <Text style={styles.paymentMethod}>
-              {order.paymentMethod === 'COD' ? 'Cash on Delivery' : order.paymentMethod}
+              {order.paymentMethod === 'COD' ? 'Cash on Delivery' : 'Online (Razorpay)'}
             </Text>
+          </View>
+          
+          <View style={{ marginTop: scale(10) }}>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summaryLabel}>Payment Status</Text>
+              <Text style={[styles.summaryValue, { color: order.paymentStatus === 'PAID' ? '#10B981' : order.paymentStatus === 'FAILED' ? '#EF4444' : '#F59E0B' }]}>
+                {order.paymentStatus || 'N/A'}
+              </Text>
+            </View>
+
+            {order.paymentMethod === 'RAZORPAY' && order.razorpayOrderId && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Razorpay Order ID</Text>
+                <Text style={[styles.summaryValue, { fontSize: responsiveFontSize(12) }]}>{order.razorpayOrderId}</Text>
+              </View>
+            )}
+
+            {order.paymentMethod === 'RAZORPAY' && order.razorpayPaymentId && (
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>Transaction ID</Text>
+                <Text style={[styles.summaryValue, { fontSize: responsiveFontSize(12) }]}>{order.razorpayPaymentId}</Text>
+              </View>
+            )}
           </View>
         </View>
       )}

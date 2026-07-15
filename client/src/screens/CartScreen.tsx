@@ -23,6 +23,7 @@ import { useResponsive } from '../hooks/useResponsive';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import PhoneNumberModal from '../components/PhoneNumberModal';
 import ResponsiveContainer from '../components/ResponsiveContainer';
+import { useCart } from '../context/CartContext';
 
 export default function CartScreen({ navigation }: any) {
   const { colors, tokens, isDark } = useTheme();
@@ -32,6 +33,7 @@ export default function CartScreen({ navigation }: any) {
   const { showAlert } = useAlert();
   const { horizontalPadding } = useResponsive();
   const insets = useSafeAreaInsets();
+  const { refreshCart } = useCart();
   const [cart, setCart] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -284,7 +286,10 @@ export default function CartScreen({ navigation }: any) {
     setLoading(true);
     try {
       const response = await api.get('/user/cart');
-      setCart(response.data);
+      const cartData = response.data;
+      setCart(cartData);
+      // Sync global CartContext so FloatingCartButton reflects real state
+      refreshCart();
     } catch (error) {
       console.error('Failed to load cart:', error);
     } finally {
@@ -329,6 +334,9 @@ export default function CartScreen({ navigation }: any) {
         quantity: newQuantity,
       });
       setCart(response.data);
+      
+      // Sync global CartContext immediately
+      refreshCart();
       
       // Clear applied coupon when cart items change
       if (appliedCoupon) {

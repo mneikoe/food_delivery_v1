@@ -1,53 +1,21 @@
-const paymentService = require("../services/paymentService");
 const Order = require("../models/Order");
-const ProcessedWebhook = require("../models/ProcessedWebhook");
+const Payment = require("../models/Payment");
+const PaymentEvent = require("../models/PaymentEvent");
+const WebhookLog = require("../models/WebhookLog");
+const paymentService = require("../services/paymentService");
+const paymentStateEngine = require("../services/paymentStateEngine");
 const logger = require("../utils/logger");
 
 /**
  * POST /api/payment/create-order
- * Create a Razorpay order for an existing food order
- * Body: { orderId, amount }
  */
 exports.createRazorpayOrder = async (req, res) => {
   try {
     const { orderId } = req.body;
-
     if (!orderId) {
       return res.status(400).json({ error: "orderId is required" });
     }
 
-    // Phase 4: Pending Order Cleanup
-    try {
-      const thirtyMinutesAgo = new Date(Date.now() - 30 * 60 * 1000);
-      const pendingOrdersToCancel = await Order.find({
-        userId: req.user._id,
-        paymentStatus: "PENDING",
-        createdAt: { $lt: thirtyMinutesAgo }
-      });
-
-      for (const pendingOrder of pendingOrdersToCancel) {
-        pendingOrder.status = "CANCELLED";
-        pendingOrder.paymentStatus = "FAILED";
-        pendingOrder.paymentLockUntil = new Date(0);
-        await pendingOrder.save();
-
-        if (pendingOrder.coinsRedeemed > 0) {
-          const User = require("../models/User");
-          const userObj = await User.findById(pendingOrder.userId);
-          if (userObj) {
-            userObj.coins = (userObj.coins || 0) + pendingOrder.coinsRedeemed;
-            await userObj.save();
-          }
-        }
-        
-        const orderService = require("../services/orderService");
-        await orderService.notifyOrderUpdate(pendingOrder).catch(e => console.error("Failed to notify order cancel update:", e));
-      }
-    } catch (cleanupErr) {
-      console.error("[PaymentController] Pending order cleanup error:", cleanupErr.message);
-    }
-
-    // Try to acquire atomic lock check using paymentLockUntil
     const now = new Date();
     const order = await Order.findOneAndUpdate(
       {
@@ -58,95 +26,48 @@ exports.createRazorpayOrder = async (req, res) => {
           { paymentLockUntil: { $lt: now } }
         ]
       },
-      {
-        $set: {
-          paymentLockUntil: new Date(Date.now() + 30000) // 30-second lock window
-        }
-      },
+      { $set: { paymentLockUntil: new Date(Date.now() + 5 * 60 * 1000) } }, // 5 min lock
       { new: true }
     );
 
     if (!order) {
-      logger.log("PAYMENT_FAILED", { orderId, reason: "LOCKED" });
-      return res.status(409).json({ error: "Payment is already being processed" });
+      return res.status(409).json({ error: "Payment is already being processed. Please wait." });
     }
 
-    // Verify order belongs to this user
-    if (order.userId.toString() !== req.user._id.toString()) {
-      order.paymentLockUntil = new Date(0);
-      await order.save();
-      return res.status(403).json({ error: "Unauthorized" });
+    if (order.paymentStatus === "PAID") {
+      return res.status(400).json({ error: "Order is already paid" });
     }
 
     try {
-      if (order.paymentStatus === "PAID") {
-        order.paymentLockUntil = new Date(0);
+      let rzpOrder;
+      if (order.razorpayOrderId) {
+        // Reuse existing order
+        rzpOrder = { id: order.razorpayOrderId, amount: Math.round(order.totalAmount * 100), currency: "INR" };
+      } else {
+        rzpOrder = await paymentService.createRazorpayOrder(
+          order.totalAmount,
+          order._id,
+          { orderId: String(order._id), userId: String(req.user._id) }
+        );
+        order.razorpayOrderId = rzpOrder.id;
         await order.save();
-        logger.log("PAYMENT_FAILED", { orderId, reason: "ALREADY_PAID" });
-        return res.status(400).json({ error: "Order already paid" });
       }
 
-      // Reuse Razorpay order only if created within last 15 minutes
-      const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-      if (
-        order.razorpayOrderId &&
-        order.paymentStatus === "PENDING" &&
-        order.paymentInitiatedAt &&
-        order.paymentInitiatedAt > fifteenMinutesAgo
-      ) {
-        order.paymentLockUntil = new Date(0);
-        await order.save();
-
-        logger.log("PAYMENT_CREATED", { orderId, razorpayOrderId: order.razorpayOrderId, reused: true });
-
-        return res.json({
-          razorpayOrderId: order.razorpayOrderId,
-          amount: Math.round(order.totalAmount * 100), // in paise
-          currency: "INR",
-          keyId: process.env.RAZORPAY_KEY_ID,
-          order: {
-            id: order._id,
-            orderId: order.orderId,
-            totalAmount: order.totalAmount,
-          },
-          prefill: {
-            name: req.user.name || "",
-            email: req.user.email || "",
-            contact: req.user.phone || "",
-          },
-        });
-      }
-
-      // Create Razorpay order
-      const razorpayOrder = await paymentService.createRazorpayOrder(
-        order.totalAmount,
-        order.orderId || order._id,
-        {
-          foodOrderId: order._id.toString(),
-          userId: req.user._id.toString(),
-          userEmail: req.user.email,
-        }
-      );
-
-      // Store Razorpay order ID on our order
-      order.razorpayOrderId = razorpayOrder.id;
-      order.paymentStatus = "PENDING";
-      order.paymentInitiatedAt = new Date();
-      order.paymentLockUntil = new Date(0);
-      await order.save();
-
-      logger.log("PAYMENT_CREATED", { orderId, razorpayOrderId: razorpayOrder.id, reused: false });
+      // Initialize state engine entry as CREATED
+      await paymentStateEngine.transitionPayment({
+        orderId: order._id,
+        razorpayOrderId: rzpOrder.id,
+        eventName: "order.created",
+        newStatus: "CREATED",
+        payload: rzpOrder,
+        environment: process.env.NODE_ENV || "development",
+      });
 
       res.json({
-        razorpayOrderId: razorpayOrder.id,
-        amount: razorpayOrder.amount, // in paise
-        currency: razorpayOrder.currency,
+        razorpayOrderId: rzpOrder.id,
+        amount: rzpOrder.amount,
+        currency: rzpOrder.currency,
         keyId: process.env.RAZORPAY_KEY_ID,
-        order: {
-          id: order._id,
-          orderId: order.orderId,
-          totalAmount: order.totalAmount,
-        },
         prefill: {
           name: req.user.name || "",
           email: req.user.email || "",
@@ -155,7 +76,7 @@ exports.createRazorpayOrder = async (req, res) => {
       });
     } catch (err) {
       order.paymentLockUntil = new Date(0);
-      await order.save().catch(e => console.error("Failed to release lock on order save:", e));
+      await order.save().catch(e => console.error("Failed to release lock:", e));
       throw err;
     }
   } catch (err) {
@@ -166,8 +87,6 @@ exports.createRazorpayOrder = async (req, res) => {
 
 /**
  * POST /api/payment/verify
- * Verify Razorpay payment signature and mark order as PAID
- * Body: { orderId, razorpayOrderId, razorpayPaymentId, razorpaySignature }
  */
 exports.verifyPayment = async (req, res) => {
   try {
@@ -186,63 +105,35 @@ exports.verifyPayment = async (req, res) => {
 
     if (!isValid) {
       console.error("[PaymentController] Invalid signature for order:", razorpayOrderId);
-      logger.log("PAYMENT_FAILED", { orderId, razorpayOrderId, reason: "INVALID_SIGNATURE" });
+      await paymentStateEngine.transitionPayment({
+        orderId,
+        razorpayOrderId,
+        razorpayPaymentId,
+        razorpaySignature,
+        eventName: "payment.verify_failed",
+        newStatus: "FAILED",
+        payload: { error: "Invalid client signature" },
+        environment: process.env.NODE_ENV || "development",
+      });
       return res.status(400).json({ error: "Payment verification failed. Invalid signature." });
     }
 
-    // Perform atomic update to mark the order as PAID
-    const order = await Order.findOneAndUpdate(
-      { _id: orderId, paymentStatus: { $ne: "PAID" } },
-      {
-        $set: {
-          paymentStatus: "PAID",
-          razorpayPaymentId: razorpayPaymentId,
-          paymentMethod: "RAZORPAY",
-          paymentCompletedAt: new Date(),
-          paymentLockUntil: new Date(0) // release lock immediately
-        }
-      },
-      { new: true }
-    );
-
-    if (order) {
-      const userController = require("./userController");
-      userController.clearCart(order.userId);
-    }
-
-    if (!order) {
-      // Check if the order was already paid
-      const existingOrder = await Order.findById(orderId);
-      if (!existingOrder) {
-        return res.status(404).json({ error: "Order not found" });
-      }
-      if (existingOrder.paymentStatus === "PAID") {
-        logger.log("PAYMENT_VERIFIED", { orderId, razorpayPaymentId, alreadyPaid: true });
-        return res.json({
-          success: true,
-          message: "Payment verified successfully",
-          order: {
-            id: existingOrder._id,
-            orderId: existingOrder.orderId,
-            paymentStatus: existingOrder.paymentStatus,
-            paymentMethod: existingOrder.paymentMethod,
-          },
-        });
-      }
-      return res.status(400).json({ error: "Order payment status cannot be updated" });
-    }
-
-    logger.log("PAYMENT_VERIFIED", { orderId, razorpayPaymentId, alreadyPaid: false });
+    // Transition state atomically to CAPTURED/SUCCESS
+    const payment = await paymentStateEngine.transitionPayment({
+      orderId,
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
+      eventName: "payment.verified",
+      newStatus: "CAPTURED",
+      payload: req.body,
+      environment: process.env.NODE_ENV || "development",
+    });
 
     res.json({
       success: true,
       message: "Payment verified successfully",
-      order: {
-        id: order._id,
-        orderId: order.orderId,
-        paymentStatus: order.paymentStatus,
-        paymentMethod: order.paymentMethod,
-      },
+      payment,
     });
   } catch (err) {
     console.error("[PaymentController] verifyPayment:", err.message);
@@ -252,88 +143,246 @@ exports.verifyPayment = async (req, res) => {
 
 /**
  * POST /api/payment/webhook
- * Razorpay webhook (optional, for server-side confirmations)
- * Note: Add RAZORPAY_WEBHOOK_SECRET to .env for production
  */
 exports.razorpayWebhook = async (req, res) => {
+  const startTime = Date.now();
+  const eventId = req.body.id;
+  const event = req.body.event;
+  const payload = req.body.payload;
+
+  let webhookLog = null;
+
   try {
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+    
+    // Webhook Signature verification
     if (webhookSecret) {
       const crypto = require("crypto");
       const signature = req.headers["x-razorpay-signature"];
-      const body = JSON.stringify(req.body);
+      
+      // Verification expects the RAW body string.
+      // req.body is parsed as Buffer by express.raw({ type: "application/json" }),
+      // so convert it back to string for HMAC validation.
+      const rawBody = req.body.toString("utf8");
+      
       const expectedSig = crypto
         .createHmac("sha256", webhookSecret)
-        .update(body)
+        .update(rawBody)
         .digest("hex");
+
       if (signature !== expectedSig) {
         logger.log("WEBHOOK_RECEIVED", { success: false, reason: "INVALID_SIGNATURE" });
         return res.status(400).json({ error: "Invalid webhook signature" });
       }
     }
 
-    const event = req.body.event;
-    const eventId = req.body.id;
-    const payload = req.body.payload;
+    // Parse the buffer body to extract JSON properties for logic processing
+    const bodyParsed = JSON.parse(req.body.toString("utf8"));
+    const eventIdParsed = bodyParsed.id;
+    const eventNameParsed = bodyParsed.event;
+    const payloadParsed = bodyParsed.payload;
 
-    logger.log("WEBHOOK_RECEIVED", { event, eventId });
-
-    if (!eventId) {
+    if (!eventIdParsed) {
       return res.status(400).json({ error: "Webhook event ID missing" });
     }
 
-    // Check if webhook event already processed
-    const alreadyProcessed = await ProcessedWebhook.findOne({ eventId });
-    if (alreadyProcessed) {
-      return res.status(200).json({ received: true, note: "Already processed" });
+    // 1. Idempotency Check: Prevent processing identical webhook twice
+    const existingLog = await WebhookLog.findOne({ eventId: eventIdParsed });
+    if (existingLog) {
+      existingLog.retryCount = (existingLog.retryCount || 0) + 1;
+      existingLog.status = "DUPLICATE";
+      await existingLog.save();
+      return res.status(200).json({ received: true, note: "Duplicate webhook event bypassed" });
     }
 
-    if (event === "payment.captured") {
-      const razorpayOrderId = payload.payment?.entity?.order_id;
-      const razorpayPaymentId = payload.payment?.entity?.id;
-      if (razorpayOrderId) {
-        const orderCheck = await Order.findOne({ razorpayOrderId });
-        if (orderCheck && orderCheck.paymentStatus === "PAID") {
-          await ProcessedWebhook.create({
-            eventId,
-            eventType: event,
-            processedAt: new Date()
-          });
-          return res.status(200).json({ received: true });
+    // Create immutable WebhookLog record
+    const rzpOrderId = payloadParsed.payment?.entity?.order_id;
+    const rzpPaymentId = payloadParsed.payment?.entity?.id;
+
+    webhookLog = new WebhookLog({
+      eventId: eventIdParsed,
+      razorpayOrderId: rzpOrderId,
+      razorpayPaymentId: rzpPaymentId,
+      eventName: eventNameParsed,
+      payload: payloadParsed,
+      headers: req.headers,
+      signatureVerified: !!webhookSecret,
+      status: "SUCCESS",
+      ipAddress: req.ip || req.headers["x-forwarded-for"],
+      userAgent: req.headers["user-agent"],
+      environment: process.env.NODE_ENV || "development",
+    });
+
+    // 2. Fetch matched Order record
+    if (rzpOrderId) {
+      const order = await Order.findOne({ razorpayOrderId: rzpOrderId });
+      if (order) {
+        // Map Razorpay event into paymentStateEngine transitions
+        let nextStatus;
+        if (eventNameParsed === "payment.authorized") {
+          nextStatus = "AUTHORIZED";
+        } else if (eventNameParsed === "payment.captured") {
+          nextStatus = "CAPTURED";
+        } else if (eventNameParsed === "payment.failed") {
+          nextStatus = "FAILED";
         }
 
-        const order = await Order.findOneAndUpdate(
-          { razorpayOrderId, paymentStatus: { $ne: "PAID" } },
-          {
-            $set: {
-              paymentStatus: "PAID",
-              paymentCompletedAt: new Date(),
-              razorpayPaymentId: razorpayPaymentId || orderCheck?.razorpayPaymentId,
-              paymentMethod: "RAZORPAY",
-              paymentLockUntil: new Date(0)
-            }
-          },
-          { new: true }
-        );
-
-        if (order) {
-          const userController = require("./userController");
-          userController.clearCart(order.userId);
-          logger.log("PAYMENT_VERIFIED", { orderId: order._id, razorpayOrderId, via: "webhook" });
+        if (nextStatus) {
+          await paymentStateEngine.transitionPayment({
+            orderId: order._id,
+            razorpayOrderId: rzpOrderId,
+            razorpayPaymentId: rzpPaymentId,
+            eventName: eventNameParsed,
+            newStatus: nextStatus,
+            payload: payloadParsed,
+            headers: req.headers,
+            webhookLogId: webhookLog._id,
+            ipAddress: req.ip || req.headers["x-forwarded-for"],
+            userAgent: req.headers["user-agent"],
+          });
         }
       }
     }
 
-    // Save event only after successful processing
-    await ProcessedWebhook.create({
-      eventId,
-      eventType: event,
-      processedAt: new Date()
-    });
+    webhookLog.latency = Date.now() - startTime;
+    await webhookLog.save();
 
     res.json({ received: true });
   } catch (err) {
-    console.error("[PaymentController] webhook:", err.message);
+    console.error("[PaymentController] webhook error:", err.message);
+    
+    // Save failed webhook details in db if webhookLog instance exists
+    if (webhookLog) {
+      webhookLog.status = "FAILED";
+      webhookLog.errorMessage = err.message;
+      webhookLog.stackTrace = err.stack;
+      webhookLog.latency = Date.now() - startTime;
+      await webhookLog.save().catch(e => console.error("Failed to save failed WebhookLog:", e));
+    } else {
+      // Save minimal record
+      await WebhookLog.create({
+        eventId: eventId || `err-${Date.now()}`,
+        eventName: event || "unknown",
+        payload: payload || {},
+        status: "FAILED",
+        errorMessage: err.message,
+        stackTrace: err.stack,
+        latency: Date.now() - startTime,
+      }).catch(e => console.error("Failed to create webhook log trace:", e));
+    }
+
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * GET /api/payment/admin/logs
+ */
+exports.getAdminLogs = async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search = "", status, eventName } = req.query;
+
+    const query = {};
+
+    if (status) query.status = status;
+    if (eventName) query.eventName = eventName;
+
+    if (search) {
+      query.$or = [
+        { razorpayOrderId: { $regex: search, $options: "i" } },
+        { razorpayPaymentId: { $regex: search, $options: "i" } },
+        { eventId: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    const count = await WebhookLog.countDocuments(query);
+    const logs = await WebhookLog.find(query)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(Number(limit));
+
+    res.json({
+      total: count,
+      page: Number(page),
+      pages: Math.ceil(count / limit),
+      logs,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * GET /api/payment/admin/dashboard
+ */
+exports.getAdminDashboard = async (req, res) => {
+  try {
+    const totalPayments = await Payment.countDocuments();
+    const successPayments = await Payment.countDocuments({ status: { $in: ["CAPTURED", "SUCCESS"] } });
+    const failedPayments = await Payment.countDocuments({ status: "FAILED" });
+    const authorizedPayments = await Payment.countDocuments({ status: "AUTHORIZED" });
+
+    // Success Rate
+    const successRate = totalPayments > 0 ? Math.round((successPayments / totalPayments) * 100) : 0;
+
+    // Webhook log statuses
+    const webhooksTotal = await WebhookLog.countDocuments();
+    const webhooksFailed = await WebhookLog.countDocuments({ status: "FAILED" });
+    const webhooksDuplicate = await WebhookLog.countDocuments({ status: "DUPLICATE" });
+
+    // Latency averages
+    const avgLatencyRes = await WebhookLog.aggregate([
+      { $match: { latency: { $exists: true } } },
+      { $group: { _id: null, avg: { $avg: "$latency" } } },
+    ]);
+    const avgLatency = avgLatencyRes.length > 0 ? Math.round(avgLatencyRes[0].avg) : 0;
+
+    // Last 30 transactions
+    const recentPayments = await Payment.find()
+      .populate("userId", "name email phone")
+      .sort({ createdAt: -1 })
+      .limit(10);
+
+    res.json({
+      metrics: {
+        totalPayments,
+        successPayments,
+        failedPayments,
+        authorizedPayments,
+        successRate,
+        webhooksTotal,
+        webhooksFailed,
+        webhooksDuplicate,
+        avgLatency,
+      },
+      recentPayments,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+};
+
+/**
+ * GET /api/payment/admin/timeline/:id
+ */
+exports.getPaymentTimeline = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const payment = await Payment.findById(id).populate("userId", "name email phone");
+    if (!payment) {
+      return res.status(404).json({ error: "Payment not found" });
+    }
+
+    const events = await PaymentEvent.find({ paymentId: payment._id })
+      .populate("webhookLogId")
+      .sort({ createdAt: 1 });
+
+    res.json({
+      payment,
+      events,
+    });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 };

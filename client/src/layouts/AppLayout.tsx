@@ -11,6 +11,7 @@ import { useLocation } from "../context/LocationContext";
 import { useEffect, useRef } from "react";
 import { updateUserLocation } from "../api/LocationApi";
 import { useTheme } from "../context/ThemeContext";
+import { CartProvider } from "../context/CartContext";
 
 export default function AppLayout() {
   const { user, showNameModal, setShowNameModal, refreshUser } = useAuth();
@@ -30,7 +31,6 @@ export default function AppLayout() {
     });
   }, [user, location?.city, location?.isManual, setLocation]);
 
-
   const handleNameSuccess = async (name: string) => {
     if (refreshUser) {
       await refreshUser();
@@ -42,16 +42,23 @@ export default function AppLayout() {
       {/* 🔝 FIXED HEADER */}
       <AppHeader brandName="Chatora Adda" />
 
-      {/* 📱 APP CONTENT - Role-based tabs */}
-      <View style={styles.content}>
-        {isAdmin ? (
-          <AdminBottomTabs />
-        ) : isDeliveryPartner ? (
-          <DeliveryBottomTabs />
-        ) : (
-          <BottomTabs />
-        )}
-      </View>
+      {/*
+        CartProvider wraps the tab content so useCart() works inside
+        BottomTabs and its children (including FloatingCartContainer).
+        FloatingCartButton is rendered INSIDE BottomTabs now (not here),
+        so it has proper navigation context.
+      */}
+      <CartProvider>
+        <View style={styles.content}>
+          {isAdmin ? (
+            <AdminBottomTabs />
+          ) : isDeliveryPartner ? (
+            <DeliveryBottomTabs />
+          ) : (
+            <BottomTabs />
+          )}
+        </View>
+      </CartProvider>
 
       {/* Name Input Modal */}
       <NameInputModal
@@ -60,8 +67,6 @@ export default function AppLayout() {
         onSuccess={handleNameSuccess}
         currentName={user?.name}
       />
-
-
     </SafeAreaView>
   );
 }

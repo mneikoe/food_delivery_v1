@@ -7,6 +7,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../context/AlertContext';
 import { api } from '../api/api';
+import { useCart } from '../context/CartContext';
 
 export default function ProductCard({ item, onView }: any) {
   const navigation = useNavigation<any>();
@@ -14,6 +15,7 @@ export default function ProductCard({ item, onView }: any) {
   const token = authContext?.token || null;
   const { showAlert } = useAlert();
   const { colors, tokens } = useTheme();
+  const { refreshCart } = useCart();
   
   const [addingToCart, setAddingToCart] = useState(false);
   const [cartItemId, setCartItemId] = useState<string | null>(null);
@@ -76,6 +78,8 @@ export default function ProductCard({ item, onView }: any) {
       });
       // Refresh cart status after adding
       await fetchCartStatus();
+      // Update global floating cart button
+      refreshCart();
     } catch (error: any) {
       showAlert('Error', error.response?.data?.error || 'Failed to add item to cart');
     } finally {
@@ -101,6 +105,8 @@ export default function ProductCard({ item, onView }: any) {
         setCartItemId(null);
         setCartQuantity(0);
         console.log('✅ Item removed from cart');
+        // Update global floating cart button
+        refreshCart();
       } catch (error: any) {
         console.error('❌ Failed to remove item:', error);
         showAlert('Error', error.response?.data?.error || 'Failed to remove item');
@@ -118,6 +124,8 @@ export default function ProductCard({ item, onView }: any) {
       // Update state immediately
       setCartQuantity(newQuantity);
       console.log('✅ Quantity updated to:', newQuantity);
+      // Update global floating cart button
+      refreshCart();
     } catch (error: any) {
       console.error('❌ Failed to update quantity:', error);
       showAlert('Error', error.response?.data?.error || 'Failed to update quantity');

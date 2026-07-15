@@ -649,12 +649,14 @@ export default function UserApp() {
               email: prefill?.email || '',
               contact: prefill?.contact || '',
             },
-            theme: { color: '#10b981' },
+            theme: { color: '#FF6B35' }, // Match Chatora Adda branding
             modal: {
               ondismiss: () => {
                 message.warning('Payment cancelled. Your order is on hold.');
                 resolve();
               },
+              // Prevents unexpected behavior on mobile/popup web flows
+              escape: false,
             },
             handler: async (response) => {
               try {
@@ -1428,9 +1430,33 @@ export default function UserApp() {
               <div>
                 <Typography.Text type="secondary">Payment Method</Typography.Text>
                 <Typography.Paragraph style={{ marginBottom: 0 }}>
-                  {selectedOrderDetails.paymentMethod || 'COD'}
+                  {selectedOrderDetails.paymentMethod === 'COD' ? 'Cash on Delivery' : 'Online (Razorpay)'}
                 </Typography.Paragraph>
               </div>
+              <div>
+                <Typography.Text type="secondary">Payment Status</Typography.Text>
+                <Typography.Paragraph style={{ marginBottom: 0, fontWeight: 600 }}>
+                  <span style={{ color: selectedOrderDetails.paymentStatus === 'PAID' ? '#10b981' : selectedOrderDetails.paymentStatus === 'FAILED' ? '#ef4444' : '#f59e0b' }}>
+                    {selectedOrderDetails.paymentStatus || 'PENDING'}
+                  </span>
+                </Typography.Paragraph>
+              </div>
+              {selectedOrderDetails.paymentMethod === 'RAZORPAY' && selectedOrderDetails.razorpayOrderId && (
+                <div>
+                  <Typography.Text type="secondary">Razorpay Order ID</Typography.Text>
+                  <Typography.Paragraph style={{ marginBottom: 0, fontSize: 11 }}>
+                    {selectedOrderDetails.razorpayOrderId}
+                  </Typography.Paragraph>
+                </div>
+              )}
+              {selectedOrderDetails.paymentMethod === 'RAZORPAY' && selectedOrderDetails.razorpayPaymentId && (
+                <div>
+                  <Typography.Text type="secondary">Transaction ID</Typography.Text>
+                  <Typography.Paragraph style={{ marginBottom: 0, fontSize: 11 }}>
+                    {selectedOrderDetails.razorpayPaymentId}
+                  </Typography.Paragraph>
+                </div>
+              )}
               <div>
                 <Typography.Text type="secondary">Delivery Boy</Typography.Text>
                 <Typography.Paragraph style={{ marginBottom: 0 }}>

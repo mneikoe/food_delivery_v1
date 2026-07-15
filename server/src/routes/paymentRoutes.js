@@ -75,6 +75,13 @@ router.post("/verify", auth, paymentController.verifyPayment);
  *       200:
  *         description: Webhook received and processed successfully
  */
+const roleCheck = require("../middleware/role");
+
 router.post("/webhook", express.raw({ type: "application/json" }), paymentController.razorpayWebhook);
+
+// Admin restricted endpoints
+router.get("/admin/dashboard", auth, roleCheck("ADMIN"), paymentController.getAdminDashboard);
+router.get("/admin/logs", auth, roleCheck("ADMIN"), paymentController.getAdminLogs);
+router.get("/admin/timeline/:id", auth, roleCheck("ADMIN"), paymentController.getPaymentTimeline);
 
 module.exports = router;
