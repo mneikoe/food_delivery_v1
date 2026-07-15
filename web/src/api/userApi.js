@@ -32,11 +32,10 @@ userApi.interceptors.response.use(
   }
 );
 
-// ─── Auth: OTP ────────────────────────────────────────────────────────────────
 export const sendUserOtp = (email) => userApi.post('/auth/send-email-otp', { email });
 
-export const verifyUserOtp = async (email, otp) => {
-  const res = await userApi.post('/auth/verify-email-otp', { email, otp });
+export const verifyUserOtp = async (email, otp, referralCode = '') => {
+  const res = await userApi.post('/auth/verify-email-otp', { email, otp, referralCode });
   if (res.data?.token) {
     localStorage.setItem('user_token', res.data.token);
     localStorage.setItem('user_role', res.data?.user?.role || 'USER');
@@ -44,6 +43,9 @@ export const verifyUserOtp = async (email, otp) => {
   }
   return res.data;
 };
+
+export const verifyReferralCode = (code) => userApi.get(`/auth/verify-referral/${code}`);
+
 
 // ─── Auth: Email + Password ───────────────────────────────────────────────────
 export const registerUser = async (email, password, name) => {
@@ -111,6 +113,7 @@ export const verifyRazorpayPayment = (data) =>
 
 // ─── Public ──────────────────────────────────────────────────────────────────
 export const getPublicOrderWindow = () => userApi.get('/public/order-window');
+export const getPublicPaymentChannels = () => userApi.get('/public/payment-channels');
 export const getPublicHeroSlides = () => userApi.get('/public/hero-slides');
 export const updateUserLocation = (data) => userApi.post('/user/location/update', data);
 

@@ -134,6 +134,10 @@ export const deleteApkInfo = () => api.delete('/admin/apk');
 export const getOrderWindow = () => api.get('/admin/order-window');
 export const updateOrderWindow = (data) => api.put('/admin/order-window', data);
 
+// Payment settings (COD & Online active toggles)
+export const getPaymentSettings = () => api.get('/admin/payment-settings');
+export const updatePaymentSettings = (data) => api.put('/admin/payment-settings', data);
+
 // Hero slides (home screen – 4 slides: image URL, headline, text)
 export const getHeroSlides = () => api.get('/admin/hero-slides');
 export const updateHeroSlides = (data) => api.put('/admin/hero-slides', data);

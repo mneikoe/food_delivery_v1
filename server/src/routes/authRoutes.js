@@ -145,7 +145,11 @@ router.post("/register", authController.registerWithPassword);
  */
 router.post("/login", validate(loginSchema), authController.loginWithPassword);
 
+// Referral code validation (Public)
+router.get("/verify-referral/:code", authController.verifyReferralCode);
+
 // FCM token update (requires auth)
 router.post("/fcm-token", auth, authController.updateFCMToken);
 
 module.exports = router;
+

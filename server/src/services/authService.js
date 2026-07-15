@@ -27,6 +27,8 @@ class AuthService {
       role: user.role,
       phone: user.phone || null,
       isEmailVerified: user.isEmailVerified || false,
+      referralCode: user.referralCode,
+      coins: user.coins || 0,
     };
   }
 
@@ -80,7 +82,7 @@ class AuthService {
     return { success: true, message: "OTP sent to email" };
   }
 
-  async verifyEmailOtp(email, otp) {
+  async verifyEmailOtp(email, otp, referralCode = "") {
     const normalizedEmail = email.trim().toLowerCase();
     const user = await User.findOne({ email: normalizedEmail });
 
@@ -117,14 +119,72 @@ class AuthService {
     }
 
     // Clear OTP after successful verification
+    const isNewUser = !user.isEmailVerified;
     user.otpHash = undefined;
     user.otpExpiry = undefined;
     user.isEmailVerified = true;
+
+    // Apply referral code if it's a new user and referralCode is provided
+    if (isNewUser && referralCode && referralCode.trim()) {
+      const cleanRefCode = referralCode.trim().toUpperCase();
+      const referrer = await User.findOne({ referralCode: cleanRefCode });
+      
+      // Prevent self-referral and ensure referrer is valid
+      if (referrer && referrer._id.toString() !== user._id.toString() && !user.referredBy) {
+        const Referral = require("../models/Referral");
+        const CoinTransaction = require("../models/CoinTransaction");
+        const { getCoinSettings } = require("../utils/coinSettings");
+        
+        const settings = getCoinSettings();
+        const referrerReward = settings.referrerReward || 100;
+        const referredReward = settings.referredReward || 50;
+        
+        // Link referral
+        user.referredBy = referrer._id;
+        
+        // Save referral record
+        const referral = new Referral({
+          referrerId: referrer._id,
+          referredId: user._id,
+          coinsEarnedReferrer: referrerReward,
+          coinsEarnedReferred: referredReward,
+          status: "COMPLETED",
+        });
+        await referral.save();
+        
+        // Award referrer
+        referrer.coins = (referrer.coins || 0) + referrerReward;
+        await referrer.save();
+        
+        const tx1 = new CoinTransaction({
+          userId: referrer._id,
+          coins: referrerReward,
+          type: "REFERRAL_BONUS",
+          source: "Refer & Earn",
+          metadata: { referredUserId: user._id }
+        });
+        await tx1.save();
+        
+        // Award referred user
+        user.coins = (user.coins || 0) + referredReward;
+        
+        const tx2 = new CoinTransaction({
+          userId: user._id,
+          coins: referredReward,
+          type: "REFERRAL_SIGNUP_BONUS",
+          source: "Referral Sign Up",
+          metadata: { referrerUserId: referrer._id }
+        });
+        await tx2.save();
+      }
+    }
+
     await user.save();
 
     const token = this._signToken(user);
     return { token, user: this._userPayload(user) };
   }
+
 
   // ─── Password Auth ───────────────────────────────────────────────────────
 
@@ -187,6 +247,16 @@ class AuthService {
     await User.findByIdAndUpdate(userId, { fcmToken });
     return { success: true };
   }
+
+  async verifyReferralCode(code) {
+    const cleanCode = (code || "").trim().toUpperCase();
+    const referrer = await User.findOne({ referralCode: cleanCode });
+    if (!referrer) {
+      throw new Error("Invalid referral code");
+    }
+    return { success: true, name: referrer.name, email: referrer.email };
+  }
 }
+
 
 module.exports = new AuthService();

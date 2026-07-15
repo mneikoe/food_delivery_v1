@@ -1,55 +1,65 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLOBAL / CUSTOMER DESIGN TOKENS
+   (Admin panel overrides live entirely in App.css scoped to .admin-shell)
+   ─────────────────────────────────────────────────────────────────────────── */
 :root {
-  /* Colors */
+  /* Customer brand */
   --primary: #f97316;
   --primary-hover: #ea580c;
   --accent: #f59e0b;
-  --dark: #020617;
-  --surface: #111827;
-  --border: #1f2937;
-  --text-primary: #f8fafc;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --success: #22c55e;
-  --danger: #ef4444;
-  --info: #3b82f6;
 
-  /* Typography Scale */
+  /* Neutral / dark base */
+  --dark:     #020617;
+  --surface:  #111827;
+  --border:   #1f2937;
+
+  /* Text */
+  --text-primary:   #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted:     #94a3b8;
+
+  /* Status */
+  --success: #22c55e;
+  --danger:  #ef4444;
+  --info:    #3b82f6;
+
+  /* Typography */
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 
   /* Border Radii */
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  --radius-xs:   4px;
+  --radius-sm:   8px;
+  --radius-md:   12px;
+  --radius-lg:   16px;
+  --radius-xl:   24px;
   --radius-full: 9999px;
 
-  /* Spacing (8-point grid) */
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-5: 20px;
-  --space-6: 24px;
-  --space-8: 32px;
+  /* 8-point spacing */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
   --space-10: 40px;
   --space-12: 48px;
   --space-16: 64px;
 
   /* Shadows */
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  --shadow-sm:      0 1px 2px 0 rgba(0,0,0,0.05);
+  --shadow-md:      0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+  --shadow-lg:      0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
   --shadow-premium: 0 12px 30px rgba(249, 115, 22, 0.15);
 
   /* Transitions */
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-fast:   150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* ─── Reset ──────────────────────────────────────────────────────────────── */
 * {
   margin: 0;
   padding: 0;
@@ -69,9 +79,7 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
-/* Unified Design System Components */
-
-/* 1. Category Chips */
+/* ─── Customer: Category Chips ───────────────────────────────────────────── */
 .chip-btn {
   display: inline-flex;
   align-items: center;
@@ -97,6 +105,7 @@ code {
   background: rgba(249, 115, 22, 0.1);
   color: #fff;
 }
+
 .chip-media {
   width: 28px;
   height: 28px;
@@ -108,18 +117,10 @@ code {
   justify-content: center;
   background: rgba(255, 255, 255, 0.05);
 }
-.chip-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.chip-fallback {
-  color: #fff;
-  font-size: 11px;
-  font-weight: 800;
-}
+.chip-image { width: 100%; height: 100%; object-fit: cover; }
+.chip-fallback { color: #fff; font-size: 11px; font-weight: 800; }
 
-/* 2. Quantity Selector Stepper */
+/* ─── Customer: Qty Stepper ──────────────────────────────────────────────── */
 .qty-selector .ant-btn {
   border-radius: var(--radius-sm);
   background: rgba(255, 255, 255, 0.04);
@@ -133,13 +134,12 @@ code {
   color: var(--text-primary);
 }
 
-/* 3. Food Grid */
+/* ─── Customer: Food Grid ────────────────────────────────────────────────── */
 .user-menu-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
   gap: var(--space-5);
 }
-
 @media (max-width: 640px) {
   .user-menu-grid {
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
@@ -147,32 +147,36 @@ code {
   }
 }
 
-/* 4. Premium Food Card overrides */
+/* ─── Customer: Premium Food Card ────────────────────────────────────────── */
 .premium-food-card.ant-card {
   background: rgba(17, 24, 39, 0.6) !important;
   backdrop-filter: blur(16px);
   border: 1px solid var(--border) !important;
   border-radius: var(--radius-lg) !important;
   overflow: hidden;
-  transition: transform var(--transition-normal), border-color var(--transition-normal), box-shadow var(--transition-normal);
+  transition:
+    transform var(--transition-normal),
+    border-color var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 .premium-food-card.ant-card:hover {
   transform: translateY(-4px);
   border-color: var(--primary) !important;
   box-shadow: var(--shadow-premium) !important;
 }
-.premium-food-card.ant-card:hover .user-grid-card-image {
-  transform: scale(1.04);
-}
-/* Disabled Input Legibility Overrides */
-.ant-input[disabled], .ant-input-disabled, .ant-input[disabled]:hover {
+.premium-food-card.ant-card:hover .user-grid-card-image { transform: scale(1.04); }
+
+/* ─── Customer: Disabled Input Legibility ────────────────────────────────── */
+.ant-input[disabled],
+.ant-input-disabled,
+.ant-input[disabled]:hover {
   color: var(--text-secondary) !important;
   background: rgba(255, 255, 255, 0.05) !important;
   border-color: rgba(255, 255, 255, 0.08) !important;
   cursor: not-allowed;
 }
 
-/* Order Details Modal Grid Styling */
+/* ─── Order Details Modal Grid (admin) ───────────────────────────────────── */
 .order-details-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -183,7 +187,7 @@ code {
 
 .order-details-grid > div {
   background: rgba(255, 255, 255, 0.02);
-  border: 1px solid var(--border);
+  border: 1px solid rgba(255, 255, 255, 0.06);
   padding: var(--space-3);
   border-radius: var(--radius-sm);
   display: flex;
@@ -194,6 +198,11 @@ code {
 .order-details-block {
   margin-top: var(--space-4);
   background: rgba(255, 255, 255, 0.02) !important;
-  border: 1px solid var(--border) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
 }
 
+/* ─── Global Scrollbar (non-admin pages) ─────────────────────────────────── */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }

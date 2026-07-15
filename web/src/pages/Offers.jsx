@@ -119,29 +119,28 @@ export default function Offers() {
       title: 'Active',
       dataIndex: 'isActive',
       key: 'isActive',
-      render: (isActive) => (isActive ? 'Yes' : 'No'),
+      render: (v) => (
+        <span style={{
+          display:'inline-flex', alignItems:'center', gap:5,
+          background: v ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+          border: v ? '1px solid rgba(34,197,94,0.25)' : '1px solid rgba(239,68,68,0.25)',
+          color: v ? '#4ade80' : '#f87171',
+          borderRadius:100, padding:'3px 10px', fontSize:10, fontWeight:700,
+        }}>
+          <span style={{ width:5, height:5, borderRadius:'50%', background: v ? '#22c55e' : '#ef4444' }} />
+          {v ? 'Active' : 'Inactive'}
+        </span>
+      ),
     },
     {
       title: 'Actions',
       key: 'actions',
+      width: 100,
       render: (_, record) => (
-        <Space>
-          <Button
-            type="link"
-            icon={<EditOutlined />}
-            onClick={() => handleEdit(record)}
-          >
-            Edit
-          </Button>
-          <Popconfirm
-            title="Are you sure you want to delete this offer?"
-            onConfirm={() => handleDelete(record._id)}
-            okText="Yes"
-            cancelText="No"
-          >
-            <Button type="link" danger icon={<DeleteOutlined />}>
-              Delete
-            </Button>
+        <Space size={6}>
+          <button onClick={() => handleEdit(record)} style={iconBtn('#3b82f6')} title="Edit"><EditOutlined /></button>
+          <Popconfirm title="Delete this offer?" onConfirm={() => handleDelete(record._id)} okText="Delete" cancelText="Cancel">
+            <button style={iconBtn('#ef4444')} title="Delete"><DeleteOutlined /></button>
           </Popconfirm>
         </Space>
       ),
@@ -149,11 +148,14 @@ export default function Offers() {
   ];
 
   return (
-    <div className="admin-page">
-      <div className="admin-page-toolbar">
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-          Add Offer
-        </Button>
+    <div className="admin-page" style={{ fontFamily:'Inter, sans-serif' }}>
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20, flexWrap:'wrap', gap:12 }}>
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, color:'#2D4060', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4 }}>Marketing</div>
+          <div style={{ fontSize:22, fontWeight:800, color:'#F1F5F9', letterSpacing:'-0.5px' }}>Offers</div>
+          <div style={{ fontSize:13, color:'#4B6180', marginTop:2 }}>Create and manage promotional banners</div>
+        </div>
+        <button onClick={handleCreate} style={primaryBtn}><PlusOutlined /> Add Offer</button>
       </div>
       <div className="admin-table-wrap">
         <Table
@@ -161,7 +163,7 @@ export default function Offers() {
           dataSource={offers}
           loading={loading}
           rowKey="_id"
-          pagination={{ pageSize: 10 }}
+          pagination={{ pageSize:10, showTotal:(t)=><span style={{color:'#4B6180',fontSize:12}}>{t} offers</span> }}
           size="middle"
         />
       </div>
@@ -239,3 +241,18 @@ export default function Offers() {
     </div>
   );
 }
+
+const iconBtn = (color) => ({
+  width:30, height:30, display:'inline-flex', alignItems:'center', justifyContent:'center',
+  background:`${color}12`, border:`1px solid ${color}25`,
+  borderRadius:7, color, cursor:'pointer', fontSize:13,
+  transition:'all 0.15s', fontFamily:'Inter, sans-serif',
+});
+
+const primaryBtn = {
+  display:'inline-flex', alignItems:'center', gap:6,
+  background:'#FACC15', border:'1px solid #FACC15',
+  borderRadius:8, padding:'8px 18px', color:'#080F1E',
+  fontSize:13, fontWeight:700, cursor:'pointer',
+  fontFamily:'Inter, sans-serif', transition:'all 0.15s',
+};

@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ["USER", "ADMIN", "DELIVERY_PARTNER"],
+    enum: ["USER", "ADMIN", "DELIVERY_PARTNER", "CUSTOMER"],
     default: "USER",
   },
   isActive: {
@@ -93,10 +93,42 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true,
+  },
+  referredBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
 });
 
 userSchema.index({ email: 1 }, { unique: true });
 userSchema.index({ role: 1 });
 userSchema.index({ "fcmTokens.token": 1 });
+userSchema.index({ referralCode: 1 }, { unique: true, sparse: true });
+
+// Auto-generate unique referral code on creation
+userSchema.pre("save", async function (next) {
+  if (!this.referralCode) {
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let isUnique = false;
+    let code;
+    while (!isUnique) {
+      code = "";
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      const existing = await this.constructor.findOne({ referralCode: code });
+      if (!existing) {
+        isUnique = true;
+      }
+    }
+    this.referralCode = code;
+  }
+  next();
+});
 
 module.exports = mongoose.model("User", userSchema);

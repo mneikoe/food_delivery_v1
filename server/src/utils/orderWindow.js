@@ -7,20 +7,24 @@ const DEFAULT_ORDER_WINDOW = {
   orderWindowEnabled: true,
   orderWindowStart: "00:00",
   orderWindowEnd: "23:59",
+  codActive: true,
+  onlineActive: true,
 };
 
 /**
  * Get order window settings from file.
- * @returns {{ orderWindowEnabled: boolean, orderWindowStart: string, orderWindowEnd: string }}
+ * @returns {{ orderWindowEnabled: boolean, orderWindowStart: string, orderWindowEnd: string, codActive: boolean, onlineActive: boolean }}
  */
 function getOrderWindowSettings() {
   try {
     if (fs.existsSync(ORDER_WINDOW_PATH)) {
       const data = JSON.parse(fs.readFileSync(ORDER_WINDOW_PATH, "utf8"));
       return {
-        orderWindowEnabled: data.orderWindowEnabled !== false,
+        orderWindowEnabled: data.orderWindowEnabled === true || data.orderWindowEnabled === "true" || data.orderWindowEnabled === undefined,
         orderWindowStart: data.orderWindowStart || "00:00",
         orderWindowEnd: data.orderWindowEnd || "23:59",
+        codActive: data.codActive === true || data.codActive === "true" || data.codActive === undefined,
+        onlineActive: data.onlineActive === true || data.onlineActive === "true" || data.onlineActive === undefined,
       };
     }
   } catch (err) {
@@ -72,15 +76,26 @@ function isOrderWindowOpen() {
 
 /**
  * Write order window settings to file.
- * @param {{ orderWindowEnabled?: boolean, orderWindowStart?: string, orderWindowEnd?: string }} data
+ * @param {{ orderWindowEnabled?: boolean, orderWindowStart?: string, orderWindowEnd?: string, codActive?: boolean, onlineActive?: boolean }} data
  */
 function setOrderWindowSettings(data) {
+  console.log("[setOrderWindowSettings] Incoming payload:", data);
   const current = getOrderWindowSettings();
+  
+  const toBool = (val) => {
+    if (val === undefined || val === null) return undefined;
+    return val === true || val === "true";
+  };
+
   const next = {
-    orderWindowEnabled: data.orderWindowEnabled !== undefined ? data.orderWindowEnabled : current.orderWindowEnabled,
+    orderWindowEnabled: toBool(data.orderWindowEnabled) !== undefined ? toBool(data.orderWindowEnabled) : current.orderWindowEnabled,
     orderWindowStart: data.orderWindowStart !== undefined ? data.orderWindowStart : current.orderWindowStart,
     orderWindowEnd: data.orderWindowEnd !== undefined ? data.orderWindowEnd : current.orderWindowEnd,
+    codActive: toBool(data.codActive) !== undefined ? toBool(data.codActive) : current.codActive,
+    onlineActive: toBool(data.onlineActive) !== undefined ? toBool(data.onlineActive) : current.onlineActive,
   };
+  
+  console.log("[setOrderWindowSettings] Writing next config:", next);
   fs.writeFileSync(ORDER_WINDOW_PATH, JSON.stringify(next, null, 2));
   return next;
 }

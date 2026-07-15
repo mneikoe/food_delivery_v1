@@ -6,9 +6,12 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Clipboard,
 } from 'react-native';
-import { useState } from 'react';
+
+import { useState, useEffect, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useAuth } from '../context/AuthContext';
 import { useLocation } from '../context/LocationContext';
@@ -18,13 +21,24 @@ import { updateUserLocation } from '../api/LocationApi';
 import ResponsiveContainer from '../components/ResponsiveContainer';
 
 export default function ProfileScreen({ navigation }: any) {
-  const { user, logout, token } = useAuth();
+  const { user, logout, token, refreshUser } = useAuth();
   const { location, setLocation } = useLocation();
   const { showAlert } = useAlert();
   const { colors, tokens, isDark } = useTheme();
   const insets = useSafeAreaInsets();
   const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+  const [isReferralVisible, setIsReferralVisible] = useState(false);
   const styles = getStyles(colors, tokens, isDark);
+
+  // Sync profile stats on mount/focus to prevent stale/duplicate coins balances
+  useFocusEffect(
+    useCallback(() => {
+      if (token && refreshUser) {
+        refreshUser();
+      }
+    }, [token, refreshUser])
+  );
+
 
   const handleLogout = () => {
     Alert.alert(
@@ -103,6 +117,70 @@ export default function ProfileScreen({ navigation }: any) {
           <Text style={styles.detailValue}>{user?.phone || 'Not set'}</Text>
         </View>
       </View>
+
+      {/* Referral Code Card */}
+      {user?.role !== 'ADMIN' && user?.role !== 'DELIVERY_PARTNER' && (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderLeft}>
+              <Ionicons name="gift-outline" size={20} color={tokens.colors.primary} />
+              <Text style={styles.cardTitle}>Refer & Earn</Text>
+            </View>
+          </View>
+          <View style={{ paddingVertical: 8, paddingHorizontal: 4 }}>
+            <Text style={{ fontSize: 13, color: colors.muted, lineHeight: 18, marginBottom: 12 }}>
+              Share your referral code with friends. You get 100 coins when they join, and they get 50 coins instantly!
+            </Text>
+            <View style={{ 
+              flexDirection: 'row', 
+              alignItems: 'center', 
+              backgroundColor: isDark ? 'rgba(250,140,22,0.1)' : 'rgba(250,140,22,0.05)',
+              borderWidth: 1,
+              borderColor: 'rgba(250,140,22,0.2)',
+              borderRadius: 8, 
+              paddingHorizontal: 16, 
+              paddingVertical: 12, 
+              justifyContent: 'space-between',
+              marginBottom: 12,
+            }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ 
+                  fontSize: 18, 
+                  fontWeight: '700', 
+                  color: '#d46b08', 
+                  letterSpacing: 1.5,
+                  fontFamily: 'monospace' 
+                }}>
+                  {isReferralVisible ? (user?.referralCode || '------') : '••••••'}
+                </Text>
+                <TouchableOpacity onPress={() => setIsReferralVisible(!isReferralVisible)} style={{ padding: 4 }}>
+                  <Ionicons 
+                    name={isReferralVisible ? "eye-off-outline" : "eye-outline"} 
+                    size={20} 
+                    color="#d46b08" 
+                  />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity 
+                onPress={() => {
+                  if (user?.referralCode) {
+                    Clipboard.setString(user.referralCode);
+                    showAlert('Success', 'Referral code copied to clipboard!');
+                  }
+                }}
+              >
+                <Text style={{ color: tokens.colors.primary, fontWeight: '700', fontSize: 14 }}>COPY</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Ionicons name="wallet-outline" size={16} color="#fa8c16" />
+              <Text style={{ fontSize: 13, color: '#fa8c16', fontWeight: '600' }}>
+                Wallet Balance: {user?.coins || 0} Coins
+              </Text>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Location Card */}
       {user?.role !== 'ADMIN' && (

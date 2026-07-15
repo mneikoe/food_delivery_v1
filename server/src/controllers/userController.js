@@ -239,6 +239,16 @@ exports.createOrder = async (req, res) => {
     }
 
     const { addressId, paymentMethod = "COD", couponCode, redeemCoins } = req.body;
+
+    const paymentSettings = require("../utils/paymentSettings");
+    const paySettings = paymentSettings.getPaymentSettings();
+    if (paymentMethod === "COD" && !paySettings.codActive) {
+      return res.status(400).json({ error: "Cash On Delivery (COD) is currently deactivated. Please choose another payment method." });
+    }
+    if (paymentMethod === "RAZORPAY" && !paySettings.onlineActive) {
+      return res.status(400).json({ error: "Online payment (Razorpay) is currently deactivated. Please choose another payment method." });
+    }
+
     const userId = req.user._id;
 
     // Check if user has phone number

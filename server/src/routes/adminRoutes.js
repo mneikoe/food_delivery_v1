@@ -80,6 +80,10 @@ router.delete("/apk", adminController.deleteApk);
 router.get("/order-window", adminController.getOrderWindow);
 router.put("/order-window", adminController.updateOrderWindow);
 
+// Payment settings (COD & Online active toggles)
+router.get("/payment-settings", adminController.getPaymentSettings);
+router.put("/payment-settings", adminController.updatePaymentSettings);
+
 // Coin settings
 router.get("/coin-settings", adminController.getCoinSettings);
 router.put("/coin-settings", adminController.updateCoinSettings);

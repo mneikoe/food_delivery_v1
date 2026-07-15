@@ -253,7 +253,7 @@ exports.getAllOrders = async (req, res) => {
     }
 
     const orders = await Order.find(filter)
-      .populate("userId", "name phone")
+      .populate("userId", "name phone email")
       .populate("deliveryPartnerId", "name phone")
       .populate("items.productId", "name image price")
       .sort({ createdAt: -1 });
@@ -267,7 +267,7 @@ exports.getAllOrders = async (req, res) => {
 exports.getOrderDetails = async (req, res) => {
   try {
     const order = await Order.findById(req.params.id)
-      .populate("userId", "name phone")
+      .populate("userId", "name phone email")
       .populate("deliveryPartnerId", "name phone")
       .populate("items.productId", "name image price");
 
@@ -275,7 +275,44 @@ exports.getOrderDetails = async (req, res) => {
       return res.status(404).json({ error: "Order not found" });
     }
 
-    res.json(order);
+    const orderObj = order.toObject();
+
+    // Attach Razorpay payment details if applicable
+    if (order.paymentMethod === "RAZORPAY" && order.razorpayPaymentId) {
+      try {
+        let razorpayEmail = null;
+        let razorpayPhone = null;
+
+        // Try database WebhookLog first
+        const PaymentEvent = require("../models/PaymentEvent");
+        const event = await PaymentEvent.findOne({
+          orderId: order._id,
+          eventName: "payment.captured"
+        });
+
+        if (event && event.payload && event.payload.payment && event.payload.payment.entity) {
+          razorpayEmail = event.payload.payment.entity.email;
+          razorpayPhone = event.payload.payment.entity.contact;
+        }
+
+        // Fallback to Razorpay SDK fetch if not found
+        if (!razorpayEmail || !razorpayPhone) {
+          const paymentService = require("../services/paymentService");
+          const rzpPayment = await paymentService.fetchPayment(order.razorpayPaymentId);
+          if (rzpPayment) {
+            razorpayEmail = rzpPayment.email || razorpayEmail;
+            razorpayPhone = rzpPayment.contact || razorpayPhone;
+          }
+        }
+
+        orderObj.razorpayEmail = razorpayEmail;
+        orderObj.razorpayPhone = razorpayPhone;
+      } catch (err) {
+        console.error("[getOrderDetails] Failed to fetch Razorpay details:", err.message);
+      }
+    }
+
+    res.json(orderObj);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -356,11 +393,41 @@ exports.getAllDeliveryPartners = async (req, res) => {
       .select("name email phone isActive createdAt")
       .sort({ createdAt: -1 });
 
-    res.json(deliveryPartners);
+    const Order = require("../models/Order");
+
+    const partnersWithStats = await Promise.all(
+      deliveryPartners.map(async (partner) => {
+        const partnerOrders = await Order.find({ deliveryPartnerId: partner._id })
+          .select("orderId status totalAmount createdAt actualDeliveryTime")
+          .sort({ createdAt: -1 });
+
+        const totalAssigned = partnerOrders.length;
+        const totalDelivered = partnerOrders.filter(o => o.status === "DELIVERED").length;
+
+        return {
+          ...partner.toObject(),
+          stats: {
+            totalAssigned,
+            totalDelivered,
+          },
+          orders: partnerOrders.map(o => ({
+            _id: o._id,
+            orderId: o.orderId,
+            status: o.status,
+            totalAmount: o.totalAmount,
+            createdAt: o.createdAt,
+            actualDeliveryTime: o.actualDeliveryTime,
+          })),
+        };
+      })
+    );
+
+    res.json(partnersWithStats);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 };
+
 
 exports.createDeliveryPartner = async (req, res) => {
   try {
@@ -669,11 +736,13 @@ exports.getOrderWindow = async (req, res) => {
 exports.updateOrderWindow = async (req, res) => {
   try {
     const orderWindow = require("../utils/orderWindow");
-    const { orderWindowEnabled, orderWindowStart, orderWindowEnd } = req.body;
+    const { orderWindowEnabled, orderWindowStart, orderWindowEnd, codActive, onlineActive } = req.body;
     const updated = orderWindow.setOrderWindowSettings({
       orderWindowEnabled,
       orderWindowStart,
       orderWindowEnd,
+      codActive,
+      onlineActive,
     });
     const status = orderWindow.isOrderWindowOpen();
     res.json({
@@ -681,6 +750,26 @@ exports.updateOrderWindow = async (req, res) => {
       ordersOpen: status.open,
       message: status.message || null,
     });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.getPaymentSettings = async (req, res) => {
+  try {
+    const paymentSettings = require("../utils/paymentSettings");
+    res.json(paymentSettings.getPaymentSettings());
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+exports.updatePaymentSettings = async (req, res) => {
+  try {
+    const paymentSettings = require("../utils/paymentSettings");
+    const { codActive, onlineActive } = req.body;
+    const updated = paymentSettings.setPaymentSettings({ codActive, onlineActive });
+    res.json(updated);
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
@@ -732,10 +821,11 @@ exports.getCoinSettings = async (req, res) => {
 exports.updateCoinSettings = async (req, res) => {
   try {
     const coinSettings = require("../utils/coinSettings");
-    const { coinsPerRupee, maxPlaysPerDay } = req.body;
-    const updated = coinSettings.setCoinSettings({ coinsPerRupee, maxPlaysPerDay });
+    const { coinsPerRupee, maxPlaysPerDay, referrerReward, referredReward } = req.body;
+    const updated = coinSettings.setCoinSettings({ coinsPerRupee, maxPlaysPerDay, referrerReward, referredReward });
     res.json(updated);
   } catch (error) {
+
     res.status(400).json({ error: error.message });
   }
 };

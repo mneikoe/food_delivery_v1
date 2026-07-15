@@ -33,21 +33,27 @@ export default function AssignedOrdersScreen() {
   const { user, token } = useAuth();
   const { showAlert } = useAlert();
   const [orders, setOrders] = useState<Order[]>([]);
+  const [stats, setStats] = useState<{ totalEarnings: number; totalDeliveries: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const fetchOrders = useCallback(async () => {
     try {
-      const response = await api.get('/delivery/assigned-orders');
-      setOrders(response.data);
+      const [ordersRes, earningsRes] = await Promise.all([
+        api.get('/delivery/assigned-orders'),
+        api.get('/delivery/earnings')
+      ]);
+      setOrders(ordersRes.data);
+      setStats(earningsRes.data);
     } catch (error: any) {
-      console.error('Failed to fetch assigned orders:', error);
+      console.error('Failed to fetch assigned orders/stats:', error);
       showAlert('Error', error.response?.data?.error || 'Failed to load orders');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
+
 
   useFocusEffect(
     useCallback(() => {
@@ -136,6 +142,18 @@ export default function AssignedOrdersScreen() {
 
   return (
     <View style={styles.container}>
+      {stats && (
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Monthly Earnings</Text>
+            <Text style={styles.statValue}>₹{stats.totalEarnings}</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Deliveries completed</Text>
+            <Text style={styles.statValue}>{stats.totalDeliveries}</Text>
+          </View>
+        </View>
+      )}
       <FlatList
         data={orders}
         keyExtractor={(item) => item._id}
@@ -151,14 +169,47 @@ export default function AssignedOrdersScreen() {
       />
     </View>
   );
+
 }
 
 const styles = StyleSheet.create({
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 4,
+    gap: 12,
+  },
+  statCard: {
+    flex: 1,
+    backgroundColor: colors.white,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 12,
+    color: colors.muted,
+    marginBottom: 4,
+    fontWeight: '500',
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: colors.primary,
+  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
   centerContainer: {
+
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',

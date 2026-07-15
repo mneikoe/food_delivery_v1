@@ -61,6 +61,37 @@ export default function CartScreen({ navigation }: any) {
     console.log(`[Analytics] Track Event: "${event}"`, params || '');
   };
 
+  const [orderWindow, setOrderWindow] = useState<any>(null);
+
+  const checkOrderWindowStatus = async () => {
+    try {
+      const [windowRes, paymentRes] = await Promise.all([
+        api.get('/public/order-window'),
+        api.get('/public/payment-channels')
+      ]);
+      
+      const windowData = windowRes.data;
+      const paymentData = paymentRes.data;
+      
+      // Combine for state compatibility
+      setOrderWindow({
+        ...windowData,
+        codActive: paymentData.codActive !== false,
+        onlineActive: paymentData.onlineActive !== false
+      });
+      
+      if (paymentData) {
+        if (paymentData.codActive === false && paymentMethod === 'COD') {
+          setPaymentMethod('RAZORPAY');
+        } else if (paymentData.onlineActive === false && paymentMethod === 'RAZORPAY') {
+          setPaymentMethod('COD');
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch settings in Mobile client:', err);
+    }
+  };
+
   useEffect(() => {
     if (token) {
       fetchCart();
@@ -69,6 +100,7 @@ export default function CartScreen({ navigation }: any) {
       fetchCoins();
       fetchAddresses();
       checkPendingOrder();
+      checkOrderWindowStatus();
     }
   }, [token]);
 
@@ -80,6 +112,7 @@ export default function CartScreen({ navigation }: any) {
         fetchCoins();
         fetchAddresses();
         checkPendingOrder();
+        checkOrderWindowStatus();
       }
     }, [token])
   );
@@ -154,7 +187,7 @@ export default function CartScreen({ navigation }: any) {
           contact: prefill.contact || user?.phone || '',
           name: prefill.name || user?.name || ''
         },
-        theme: { color: '#10b981' }
+        theme: { color: '#FF6B35' }
       };
 
       logAnalyticsEvent('payment_sdk_opened', { orderId: order._id, amount });
@@ -325,6 +358,7 @@ export default function CartScreen({ navigation }: any) {
     await fetchAvailableCoupons();
     await fetchAddresses();
     await checkPendingOrder();
+    await checkOrderWindowStatus();
     setRefreshing(false);
   };
 
@@ -779,61 +813,65 @@ export default function CartScreen({ navigation }: any) {
             <Text style={styles.paymentSelectorTitle}>Select Payment Method</Text>
           </View>
           <View style={styles.paymentSelectorRow}>
-            <TouchableOpacity
-              style={[
-                styles.paymentOptionCard,
-                paymentMethod === 'COD' && styles.paymentOptionCardActive,
-              ]}
-              onPress={() => setPaymentMethod('COD')}
-            >
-              <Ionicons
-                name="cash"
-                size={22}
-                color={paymentMethod === 'COD' ? tokens.colors.primary : colors.muted}
-              />
-              <View style={styles.paymentOptionDetails}>
-                <Text
-                  style={[
-                    styles.paymentOptionLabel,
-                    paymentMethod === 'COD' && styles.paymentOptionLabelActive,
-                  ]}
-                >
-                  Cash on Delivery
-                </Text>
-                <Text style={styles.paymentOptionSub}>Pay cash at your doorstep</Text>
-              </View>
-              {paymentMethod === 'COD' && (
-                <Ionicons name="checkmark-circle" size={18} color={tokens.colors.primary} />
-              )}
-            </TouchableOpacity>
+            {(!orderWindow || orderWindow.codActive !== false) && (
+              <TouchableOpacity
+                style={[
+                  styles.paymentOptionCard,
+                  paymentMethod === 'COD' && styles.paymentOptionCardActive,
+                ]}
+                onPress={() => setPaymentMethod('COD')}
+              >
+                <Ionicons
+                  name="cash"
+                  size={22}
+                  color={paymentMethod === 'COD' ? tokens.colors.primary : colors.muted}
+                />
+                <View style={styles.paymentOptionDetails}>
+                  <Text
+                    style={[
+                      styles.paymentOptionLabel,
+                      paymentMethod === 'COD' && styles.paymentOptionLabelActive,
+                    ]}
+                  >
+                    Cash on Delivery
+                  </Text>
+                  <Text style={styles.paymentOptionSub}>Pay cash at your doorstep</Text>
+                </View>
+                {paymentMethod === 'COD' && (
+                  <Ionicons name="checkmark-circle" size={18} color={tokens.colors.primary} />
+                )}
+              </TouchableOpacity>
+            )}
 
-            <TouchableOpacity
-              style={[
-                styles.paymentOptionCard,
-                paymentMethod === 'RAZORPAY' && styles.paymentOptionCardActive,
-              ]}
-              onPress={() => setPaymentMethod('RAZORPAY')}
-            >
-              <Ionicons
-                name="card"
-                size={22}
-                color={paymentMethod === 'RAZORPAY' ? tokens.colors.primary : colors.muted}
-              />
-              <View style={styles.paymentOptionDetails}>
-                <Text
-                  style={[
-                    styles.paymentOptionLabel,
-                    paymentMethod === 'RAZORPAY' && styles.paymentOptionLabelActive,
-                  ]}
-                >
-                  Pay Online
-                </Text>
-                <Text style={styles.paymentOptionSub}>UPI, Cards, Netbanking</Text>
-              </View>
-              {paymentMethod === 'RAZORPAY' && (
-                <Ionicons name="checkmark-circle" size={18} color={tokens.colors.primary} />
-              )}
-            </TouchableOpacity>
+            {(!orderWindow || orderWindow.onlineActive !== false) && (
+              <TouchableOpacity
+                style={[
+                  styles.paymentOptionCard,
+                  paymentMethod === 'RAZORPAY' && styles.paymentOptionCardActive,
+                ]}
+                onPress={() => setPaymentMethod('RAZORPAY')}
+              >
+                <Ionicons
+                  name="card"
+                  size={22}
+                  color={paymentMethod === 'RAZORPAY' ? tokens.colors.primary : colors.muted}
+                />
+                <View style={styles.paymentOptionDetails}>
+                  <Text
+                    style={[
+                      styles.paymentOptionLabel,
+                      paymentMethod === 'RAZORPAY' && styles.paymentOptionLabelActive,
+                    ]}
+                  >
+                    Pay Online
+                  </Text>
+                  <Text style={styles.paymentOptionSub}>UPI, Cards, Netbanking</Text>
+                </View>
+                {paymentMethod === 'RAZORPAY' && (
+                  <Ionicons name="checkmark-circle" size={18} color={tokens.colors.primary} />
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </View>
 

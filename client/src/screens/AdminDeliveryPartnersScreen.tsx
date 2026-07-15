@@ -25,13 +25,27 @@ interface Partner {
   phone: string;
   isActive: boolean;
   createdAt: string;
+  stats?: {
+    totalAssigned: number;
+    totalDelivered: number;
+  };
+  orders?: {
+    _id: string;
+    orderId: string;
+    status: string;
+    totalAmount: number;
+    createdAt: string;
+    actualDeliveryTime?: string;
+  }[];
 }
 
 export default function AdminDeliveryPartnersScreen() {
   const { showAlert } = useAlert();
   const [partners, setPartners] = useState<Partner[]>([]);
+  const [expandedPartners, setExpandedPartners] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
 
   // Add Partner Modal State
   const [modalVisible, setModalVisible] = useState(false);
@@ -144,42 +158,121 @@ export default function AdminDeliveryPartnersScreen() {
     setStep(1);
   };
 
-  const renderPartnerCard = ({ item }: { item: Partner }) => (
-    <View style={styles.partnerCard}>
-      <View style={styles.partnerInfo}>
-        <View style={styles.avatar}>
-          <Ionicons name="person" size={20} color="#ffffff" />
+  const toggleExpandPartner = (id: string) => {
+    setExpandedPartners(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const renderPartnerCard = ({ item }: { item: Partner }) => {
+    const isExpanded = expandedPartners[item._id] || false;
+    const hasOrders = item.orders && item.orders.length > 0;
+
+    return (
+      <View style={styles.partnerCard}>
+        <View style={styles.partnerInfo}>
+          <View style={styles.avatar}>
+            <Ionicons name="person" size={20} color="#ffffff" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.partnerName}>{item.name}</Text>
+            <Text style={styles.partnerEmail}>{item.email}</Text>
+            {item.phone ? (
+              <TouchableOpacity onPress={() => Linking.openURL(`tel:${item.phone}`)} style={styles.phoneRow}>
+                <Ionicons name="call" size={14} color={colors.primary} />
+                <Text style={styles.partnerPhone}>{item.phone}</Text>
+              </TouchableOpacity>
+            ) : (
+              <Text style={styles.noPhone}>No phone number</Text>
+            )}
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.partnerName}>{item.name}</Text>
-          <Text style={styles.partnerEmail}>{item.email}</Text>
-          {item.phone ? (
-            <TouchableOpacity onPress={() => Linking.openURL(`tel:${item.phone}`)} style={styles.phoneRow}>
-              <Ionicons name="call" size={14} color={colors.primary} />
-              <Text style={styles.partnerPhone}>{item.phone}</Text>
-            </TouchableOpacity>
-          ) : (
-            <Text style={styles.noPhone}>No phone number</Text>
-          )}
+
+        {/* Stats Row */}
+        <View style={styles.statsRow}>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Assigned Orders</Text>
+            <Text style={styles.statValue}>{item.stats?.totalAssigned || 0}</Text>
+          </View>
+          <View style={styles.statBox}>
+            <Text style={styles.statLabel}>Delivered</Text>
+            <Text style={[styles.statValue, { color: '#10B981' }]}>{item.stats?.totalDelivered || 0}</Text>
+          </View>
+        </View>
+
+        {/* Expandable Order List */}
+        {hasOrders && (
+          <TouchableOpacity 
+            style={styles.expandToggle} 
+            onPress={() => toggleExpandPartner(item._id)}
+          >
+            <Text style={styles.expandToggleText}>
+              {isExpanded ? 'Hide Order History' : `Show Order History (${item.orders?.length})`}
+            </Text>
+            <Ionicons 
+              name={isExpanded ? "chevron-up" : "chevron-down"} 
+              size={16} 
+              color={colors.primary} 
+            />
+          </TouchableOpacity>
+        )}
+
+        {isExpanded && hasOrders && (
+          <View style={styles.ordersListContainer}>
+            {item.orders?.map((ord) => (
+              <View key={ord._id} style={styles.orderListItem}>
+                <View style={styles.orderItemHeader}>
+                  <Text style={styles.orderItemCode}>{ord.orderId}</Text>
+                  <Text style={[
+                    styles.orderItemStatus,
+                    { color: ord.status === 'DELIVERED' ? '#10B981' : ord.status === 'CANCELLED' ? '#EF4444' : '#3B82F6' }
+                  ]}>
+                    {ord.status.replace(/_/g, ' ')}
+                  </Text>
+                </View>
+                <Text style={styles.orderItemDate}>
+                  Assigned: {new Date(ord.createdAt).toLocaleString('en-IN', {
+                    day: 'numeric',
+                    month: 'short',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </Text>
+                {ord.actualDeliveryTime && (
+                  <Text style={styles.orderItemDeliveryDate}>
+                    Delivered: {new Date(ord.actualDeliveryTime).toLocaleString('en-IN', {
+                      day: 'numeric',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                )}
+                <Text style={styles.orderItemAmt}>Amount: ₹{ord.totalAmount.toFixed(2)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <View style={styles.divider} />
+
+        <View style={styles.cardFooter}>
+          <View style={styles.statusLabelContainer}>
+            <View style={[styles.indicator, { backgroundColor: item.isActive ? '#10B981' : '#EF4444' }]} />
+            <Text style={styles.statusLabelText}>{item.isActive ? 'Active' : 'Inactive'}</Text>
+          </View>
+          <Switch
+            value={item.isActive}
+            onValueChange={() => handleToggleStatus(item._id, item.isActive)}
+            trackColor={{ false: '#cbd5e1', true: '#a7f3d0' }}
+            thumbColor={item.isActive ? '#10b981' : '#64748b'}
+          />
         </View>
       </View>
+    );
+  };
 
-      <View style={styles.divider} />
-
-      <View style={styles.cardFooter}>
-        <View style={styles.statusLabelContainer}>
-          <View style={[styles.indicator, { backgroundColor: item.isActive ? '#10B981' : '#EF4444' }]} />
-          <Text style={styles.statusLabelText}>{item.isActive ? 'Active' : 'Inactive'}</Text>
-        </View>
-        <Switch
-          value={item.isActive}
-          onValueChange={() => handleToggleStatus(item._id, item.isActive)}
-          trackColor={{ false: '#cbd5e1', true: '#a7f3d0' }}
-          thumbColor={item.isActive ? '#10b981' : '#64748b'}
-        />
-      </View>
-    </View>
-  );
 
   return (
     <View style={styles.container}>
@@ -538,4 +631,83 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+    gap: 8,
+  },
+  statBox: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  expandToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    marginTop: 8,
+    gap: 4,
+  },
+  expandToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#FF6B35',
+  },
+  ordersListContainer: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  orderListItem: {
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  orderItemHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  orderItemCode: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0f172a',
+  },
+  orderItemStatus: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  orderItemDate: {
+    fontSize: 11,
+    color: '#64748b',
+  },
+  orderItemDeliveryDate: {
+    fontSize: 11,
+    color: '#10B981',
+    marginTop: 1,
+  },
+  orderItemAmt: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#334155',
+    marginTop: 2,
+  },
 });
+

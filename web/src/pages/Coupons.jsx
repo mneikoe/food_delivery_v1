@@ -145,11 +145,14 @@ export default function Coupons() {
   ];
 
   return (
-    <div className="admin-page">
-      <div className="admin-page-toolbar">
-        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>
-          Add Coupon
-        </Button>
+    <div className="admin-page" style={{ fontFamily:'Inter, sans-serif' }}>
+      <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:20, flexWrap:'wrap', gap:12 }}>
+        <div>
+          <div style={{ fontSize:10, fontWeight:700, color:'#2D4060', textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4 }}>Marketing</div>
+          <div style={{ fontSize:22, fontWeight:800, color:'#F1F5F9', letterSpacing:'-0.5px' }}>Coupons</div>
+          <div style={{ fontSize:13, color:'#4B6180', marginTop:2 }}>Create and manage discount codes</div>
+        </div>
+        <Button type="primary" icon={<PlusOutlined />} onClick={handleCreate}>Add Coupon</Button>
       </div>
       <div className="admin-table-wrap">
         <Table
@@ -157,7 +160,7 @@ export default function Coupons() {
           dataSource={coupons}
           loading={loading}
           rowKey="_id"
-          pagination={{ pageSize: 10 }}
+          pagination={{ pageSize:10, showTotal:(t)=><span style={{color:'#4B6180',fontSize:12}}>{t} coupons</span> }}
           size="middle"
         />
       </div>

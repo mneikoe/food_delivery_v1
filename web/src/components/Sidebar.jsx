@@ -1,5 +1,6 @@
 import { Layout } from 'antd';
 import { useNavigate, useLocation } from 'react-router-dom';
+import logoImg from '../assets/logo-chatora.png';
 
 const { Sider } = Layout;
 
@@ -43,44 +44,48 @@ export default function Sidebar({ collapsed, onCollapse }) {
         left: 0,
         top: 0,
         bottom: 0,
-        background: '#0b0f1a',
-        borderRight: '1px solid rgba(16,185,129,0.12)',
+        background: '#080F1E',
+        borderRight: '1px solid rgba(255,255,255,0.06)',
         zIndex: 100,
       }}
     >
       {/* Brand */}
       <div style={{
-        padding: collapsed ? '20px 0' : '20px 20px',
+        padding: collapsed ? '16px 0' : '16px 16px',
         display: 'flex',
         alignItems: 'center',
         gap: 10,
-        marginBottom: 8,
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
+        marginBottom: 4,
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
         justifyContent: collapsed ? 'center' : 'flex-start',
+        background: '#080F1E',
       }}>
         <div style={{
-          width: 36, height: 36,
-          borderRadius: 10,
-          background: 'linear-gradient(135deg,#10b981,#059669)',
+          width: collapsed ? 40 : 40, height: 40,
+          borderRadius: 12,
+          background: '#fff',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 18, flexShrink: 0,
-          boxShadow: '0 4px 12px rgba(16,185,129,0.4)',
-        }}>🍽️</div>
+          flexShrink: 0,
+          overflow: 'hidden',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+        }}>
+          <img src={logoImg} alt="Chatora Adda" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+        </div>
         {!collapsed && (
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: '#f1f5f9', lineHeight: 1.2 }}>
+            <div style={{ fontSize: 14, fontWeight: 800, color: '#f1f5f9', lineHeight: 1.1, letterSpacing: '-0.3px' }}>
               Chatora Adda
             </div>
-            <div style={{ fontSize: 11, color: '#475569', marginTop: 1 }}>Admin Panel</div>
+            <div style={{ fontSize: 10, color: '#FACC15', marginTop: 2, fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Admin Panel</div>
           </div>
         )}
       </div>
 
       {/* Nav Items */}
-      <div style={{ padding: '8px 10px', flex: 1 }}>
+      <div style={{ padding: '8px 10px', flex: 1, overflowY: 'auto' }}>
         {!collapsed && (
-          <div style={{ fontSize: 10, color: '#334155', fontWeight: 700, textTransform: 'uppercase',
-            letterSpacing: '0.08em', padding: '8px 8px 4px', marginBottom: 4 }}>
+          <div style={{ fontSize: 10, color: '#2D4060', fontWeight: 700, textTransform: 'uppercase',
+            letterSpacing: '0.08em', padding: '10px 8px 4px', marginBottom: 4 }}>
             Navigation
           </div>
         )}
@@ -100,11 +105,11 @@ export default function Sidebar({ collapsed, onCollapse }) {
                 padding: collapsed ? '10px 0' : '10px 12px',
                 marginBottom: 2,
                 background: isActive
-                  ? 'linear-gradient(90deg, rgba(16,185,129,0.2), rgba(16,185,129,0.05))'
+                  ? 'linear-gradient(90deg, rgba(250,204,21,0.15), rgba(250,204,21,0.02))'
                   : 'transparent',
-                border: isActive ? '1px solid rgba(16,185,129,0.2)' : '1px solid transparent',
+                border: isActive ? '1px solid rgba(250,204,21,0.25)' : '1px solid transparent',
                 borderRadius: 10,
-                color: isActive ? '#10b981' : '#64748b',
+                color: isActive ? '#FACC15' : '#8EA2BF',
                 cursor: 'pointer',
                 textAlign: 'left',
                 fontFamily: 'Inter, sans-serif',
@@ -118,13 +123,13 @@ export default function Sidebar({ collapsed, onCollapse }) {
               onMouseEnter={(e) => {
                 if (!isActive) {
                   e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
-                  e.currentTarget.style.color = '#f1f5f9';
+                  e.currentTarget.style.color = '#F8FAFC';
                 }
               }}
               onMouseLeave={(e) => {
                 if (!isActive) {
                   e.currentTarget.style.background = 'transparent';
-                  e.currentTarget.style.color = '#64748b';
+                  e.currentTarget.style.color = '#8EA2BF';
                 }
               }}
             >
@@ -134,7 +139,7 @@ export default function Sidebar({ collapsed, onCollapse }) {
                   position: 'absolute',
                   left: 0, top: '20%', bottom: '20%',
                   width: 3,
-                  background: '#10b981',
+                  background: '#FACC15',
                   borderRadius: '0 3px 3px 0',
                 }} />
               )}
@@ -145,7 +150,7 @@ export default function Sidebar({ collapsed, onCollapse }) {
         })}
 
         {/* Divider */}
-        <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '12px 4px' }} />
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.06)', margin: '12px 4px' }} />
 
         {/* Logout */}
         <button
@@ -184,8 +189,8 @@ export default function Sidebar({ collapsed, onCollapse }) {
 
       {/* Bottom version tag */}
       {!collapsed && (
-        <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.04)' }}>
-          <div style={{ fontSize: 10, color: '#1e293b', textAlign: 'center' }}>
+        <div style={{ padding: '12px 20px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+          <div style={{ fontSize: 10, color: '#2D4060', textAlign: 'center' }}>
             Chatora Adda v1.0
           </div>
         </div>

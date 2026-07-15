@@ -21,12 +21,14 @@ exports.verifyEmailOtp = async (req, res) => {
   try {
     const email = (req.body.email || "").trim();
     const otp = String(req.body.otp || "").trim();
+    const referralCode = (req.body.referralCode || "").trim();
 
     if (!email || !otp) {
       return res.status(400).json({ error: "Email and OTP are required" });
     }
 
-    const result = await authService.verifyEmailOtp(email, otp);
+    const result = await authService.verifyEmailOtp(email, otp, referralCode);
+
     
     if (result.user && result.user.role === "ADMIN") {
       const { logAudit } = require("../utils/auditLogger");
@@ -115,3 +117,17 @@ exports.updateFCMToken = async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 };
+
+exports.verifyReferralCode = async (req, res) => {
+  try {
+    const code = (req.params.code || "").trim().toUpperCase();
+    if (!code) {
+      return res.status(400).json({ error: "Referral code is required" });
+    }
+    const result = await authService.verifyReferralCode(code);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+};
+

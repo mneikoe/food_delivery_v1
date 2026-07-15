@@ -35,6 +35,8 @@ import {
   EnvironmentOutlined,
   AppstoreOutlined,
   UnorderedListOutlined,
+  EyeOutlined,
+  EyeInvisibleOutlined,
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
@@ -52,6 +54,7 @@ import {
   getUserProducts,
   getUserProfile,
   getPublicOrderWindow,
+  getPublicPaymentChannels,
   updateUserLocation,
   updateUserAddress,
   updateUserCartItem,
@@ -156,6 +159,7 @@ export default function UserApp() {
   const [loading, setLoading] = useState(true);
 
   const [profile, setProfile] = useState(null);
+  const [referralVisible, setReferralVisible] = useState(false);
   const [addresses, setAddresses] = useState([]);
   const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
@@ -197,22 +201,41 @@ export default function UserApp() {
 
   const checkOrderWindowStatus = async ({ showToast = true } = {}) => {
     try {
-      const res = await getPublicOrderWindow();
-      const data = res.data;
-      setOrderWindow(data);
+      const [windowRes, paymentRes] = await Promise.all([
+        getPublicOrderWindow(),
+        getPublicPaymentChannels()
+      ]);
+      const windowData = windowRes.data;
+      const paymentData = paymentRes.data;
+      
+      const mergedData = {
+        ...windowData,
+        codActive: paymentData.codActive !== false,
+        onlineActive: paymentData.onlineActive !== false
+      };
+      
+      setOrderWindow(mergedData);
 
-      if (data?.ordersOpen === false) {
+      if (mergedData?.ordersOpen === false) {
         if (showToast) {
           message.warning({
             key: 'order-window-closed',
             duration: 4,
-            content: getOrderClosedToastMessage(data),
+            content: getOrderClosedToastMessage(mergedData),
           });
         }
       } else {
         message.destroy('order-window-closed');
       }
-      return data;
+
+      // Handle payment method default resetting based on active channels
+      if (mergedData?.codActive === false && paymentMethod === 'COD') {
+        setPaymentMethod('RAZORPAY');
+      } else if (mergedData?.onlineActive === false && paymentMethod === 'RAZORPAY') {
+        setPaymentMethod('COD');
+      }
+
+      return mergedData;
     } catch (error) {
       // silent fallback; order API will still validate on place order
       return null;
@@ -325,6 +348,15 @@ export default function UserApp() {
     loadAll();
     autoDetectLocation();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'profile') {
+      getUserProfile().then((res) => {
+        setProfile(res.data);
+      }).catch(err => console.warn('Failed to refresh profile on tab focus:', err));
+    }
+  }, [activeTab]);
+
 
   useEffect(() => {
     checkOrderWindowStatus({ showToast: true });
@@ -643,7 +675,7 @@ export default function UserApp() {
             order_id: razorpayOrderId,
             name: 'Chatora Adda',
             description: 'Food Order Payment',
-            image: '/favicon.ico',
+            image: logoImage,
             prefill: {
               name: prefill?.name || '',
               email: prefill?.email || '',
@@ -1014,9 +1046,11 @@ export default function UserApp() {
                 {/* Payment Method Selection */}
                 <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
                   {[
-                    { key: 'COD', icon: '💵', label: 'Cash on Delivery', sub: 'Pay when delivered' },
-                    { key: 'RAZORPAY', icon: '💳', label: 'Pay Online', sub: 'Cards, UPI, Netbanking' },
-                  ].map(pm => (
+                    { key: 'COD', icon: '💵', label: 'Cash on Delivery', sub: 'Pay when delivered', active: orderWindow?.codActive !== false },
+                    { key: 'RAZORPAY', icon: '💳', label: 'Pay Online', sub: 'Cards, UPI, Netbanking', active: orderWindow?.onlineActive !== false },
+                  ]
+                  .filter(pm => pm.active)
+                  .map(pm => (
                     <button
                       key={pm.key}
                       type="button"
@@ -1194,7 +1228,48 @@ export default function UserApp() {
                   </Typography.Text>
                 </Space>
               </Card>
+
+              <Card 
+                title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>🎁 Refer & Earn</span>} 
+                style={{ marginTop: 16, borderRadius: 12, border: '1px dashed #fa8c16', background: 'rgba(250, 140, 22, 0.02)' }}
+              >
+                <div style={{ textAlign: 'center', padding: '8px 0' }}>
+                  <Typography.Text type="secondary" style={{ fontSize: 13, display: 'block', marginBottom: 12 }}>
+                    Share your unique referral code with friends. You get <strong>100 coins</strong> when they join, and they get <strong>50 coins</strong> instantly!
+                  </Typography.Text>
+                  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, background: 'rgba(250,140,22,0.08)', padding: '12px 16px', borderRadius: 8, maxWidth: 280, margin: '0 auto 12px auto', border: '1px solid rgba(250,140,22,0.2)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Typography.Text strong style={{ fontSize: 20, letterSpacing: 1.5, color: '#d46b08', fontFamily: 'monospace' }}>
+                        {referralVisible ? (profile?.referralCode || '------') : '••••••'}
+                      </Typography.Text>
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={referralVisible ? <EyeInvisibleOutlined /> : <EyeOutlined />}
+                        onClick={() => setReferralVisible(!referralVisible)}
+                        style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', color: '#d46b08' }}
+                      />
+                    </div>
+                    <Button 
+                      type="link" 
+                      onClick={() => {
+                        if (profile?.referralCode) {
+                          navigator.clipboard.writeText(profile.referralCode);
+                          message.success('Referral code copied to clipboard!');
+                        }
+                      }}
+                      style={{ padding: 0, fontWeight: 600 }}
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                  <Typography.Text style={{ fontSize: 13, color: '#fa8c16', fontWeight: 600 }}>
+                    🪙 Your Wallet Balance: {profile?.coins || 0} Coins
+                  </Typography.Text>
+                </div>
+              </Card>
             </Col>
+
             <Col xs={24} md={12}>
               <Card title="Saved addresses" extra={<Button size="small" onClick={openAddAddress}>Add</Button>}>
                 <List
@@ -1439,6 +1514,12 @@ export default function UserApp() {
                   <span style={{ color: selectedOrderDetails.paymentStatus === 'PAID' ? '#10b981' : selectedOrderDetails.paymentStatus === 'FAILED' ? '#ef4444' : '#f59e0b' }}>
                     {selectedOrderDetails.paymentStatus || 'PENDING'}
                   </span>
+                </Typography.Paragraph>
+              </div>
+              <div style={{ gridColumn: 'span 2' }}>
+                <Typography.Text type="secondary">Customer Contact Details</Typography.Text>
+                <Typography.Paragraph style={{ marginBottom: 0 }}>
+                  📧 {profile?.email || 'N/A'} | 📱 {profile?.phone || 'N/A'}
                 </Typography.Paragraph>
               </div>
               {selectedOrderDetails.paymentMethod === 'RAZORPAY' && selectedOrderDetails.razorpayOrderId && (

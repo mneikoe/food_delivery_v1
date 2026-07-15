@@ -4,7 +4,8 @@ const sendOtpSchema = Joi.object({
   email: Joi.string().email().required().messages({
     "string.email": "Please enter a valid email address",
     "any.required": "Email is required"
-  })
+  }),
+  referralCode: Joi.string().allow("").optional()
 });
 
 const verifyOtpSchema = Joi.object({
@@ -15,8 +16,10 @@ const verifyOtpSchema = Joi.object({
   otp: Joi.string().pattern(/^\d{4}$/).required().messages({
     "string.pattern.base": "OTP must be a 4-digit number",
     "any.required": "OTP is required"
-  })
+  }),
+  referralCode: Joi.string().allow("").optional()
 });
+
 
 const loginSchema = Joi.object({
   email: Joi.string().email().required().messages({

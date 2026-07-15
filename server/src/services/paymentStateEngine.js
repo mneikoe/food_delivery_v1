@@ -109,7 +109,7 @@ class PaymentStateEngine {
     await paymentEvent.save();
 
     // 5. Execute Order Flow Side Effects
-    await this.executeStateSideEffects(payment, newStatus);
+    await this.executeStateSideEffects(payment, newStatus, payload);
 
     // 6. Broadcast Real-time update via Socket.io if available
     try {
@@ -134,7 +134,7 @@ class PaymentStateEngine {
   /**
    * Execute side effects (Inventory, Notifications, Coins, etc.) based on new status
    */
-  async executeStateSideEffects(payment, status) {
+  async executeStateSideEffects(payment, status, payload = {}) {
     const order = await Order.findById(payment.orderId);
     if (!order) return;
 
@@ -154,6 +154,19 @@ class PaymentStateEngine {
         if (payment.razorpayPaymentId) {
           order.razorpayPaymentId = payment.razorpayPaymentId;
         }
+
+        // Save detailed Razorpay payment metadata on Order
+        const entity = payload?.payment?.entity || payload;
+        if (entity) {
+          if (entity.email) order.razorpayEmail = entity.email;
+          if (entity.contact) order.razorpayPhone = entity.contact;
+          if (entity.method) order.razorpayMethod = entity.method;
+          if (entity.vpa) order.razorpayVPA = entity.vpa;
+          if (entity.card) {
+            order.razorpayCardDetails = `${entity.card.network || entity.card.brand || ""} **** ${entity.card.last4 || ""}`.trim();
+          }
+        }
+
         await order.save();
 
         // Reduce inventory

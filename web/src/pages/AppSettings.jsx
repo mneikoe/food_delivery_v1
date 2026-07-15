@@ -6,7 +6,7 @@ import {
   getHeroSlides, updateHeroSlides, uploadHeroImage, getCoinSettings, updateCoinSettings,
   getGamificationSettings, updateGamificationSettings, getRewardTiers, createRewardTier, 
   updateRewardTier, deleteRewardTier, getMissions, createMission, updateMission, 
-  deleteMission, getCoinTransactions
+  deleteMission, getCoinTransactions, getPaymentSettings, updatePaymentSettings
 } from '../api/adminApi';
 
 const { Title, Text, Paragraph } = Typography;
@@ -19,11 +19,7 @@ export default function AppSettings() {
   const [fileList, setFileList] = useState([]);
   const [version, setVersion] = useState('1.0.0');
 
-  const [orderWindowEnabled, setOrderWindowEnabled] = useState(true);
-  const [orderWindowStart, setOrderWindowStart] = useState('00:00');
-  const [orderWindowEnd, setOrderWindowEnd] = useState('23:59');
-  const [ordersOpen, setOrdersOpen] = useState(true);
-  const [orderWindowSaving, setOrderWindowSaving] = useState(false);
+
 
   const [heroSlides, setHeroSlides] = useState([
     { image: '', headline: '', text: '' },
@@ -36,7 +32,10 @@ export default function AppSettings() {
 
   const [coinsPerRupee, setCoinsPerRupee] = useState(10);
   const [maxPlaysPerDay, setMaxPlaysPerDay] = useState(5);
+  const [referrerReward, setReferrerReward] = useState(100);
+  const [referredReward, setReferredReward] = useState(50);
   const [coinsSaving, setCoinsSaving] = useState(false);
+
 
   // Gamification States
   const [gamificationSettings, setGamificationSettings] = useState(null);
@@ -58,6 +57,7 @@ export default function AppSettings() {
   useEffect(() => {
     fetchApkInfo();
     fetchOrderWindow();
+    fetchPaymentSettings();
     fetchHeroSlides();
     fetchCoinSettings();
     fetchGamificationData();
@@ -211,6 +211,15 @@ export default function AppSettings() {
     }
   };
 
+  const [orderWindowEnabled, setOrderWindowEnabled] = useState(true);
+  const [orderWindowStart, setOrderWindowStart] = useState('00:00');
+  const [orderWindowEnd, setOrderWindowEnd] = useState('23:59');
+  const [ordersOpen, setOrdersOpen] = useState(true);
+  const [codActive, setCodActive] = useState(true);
+  const [onlineActive, setOnlineActive] = useState(true);
+  const [orderWindowSaving, setOrderWindowSaving] = useState(false);
+  const [orderStatusToggling, setOrderStatusToggling] = useState(false);
+
   const fetchOrderWindow = async () => {
     try {
       const res = await getOrderWindow();
@@ -224,12 +233,24 @@ export default function AppSettings() {
     }
   };
 
+  const fetchPaymentSettings = async () => {
+    try {
+      const res = await getPaymentSettings();
+      setCodActive(res.data.codActive !== false);
+      setOnlineActive(res.data.onlineActive !== false);
+    } catch (e) {
+      console.error('Failed to fetch payment settings:', e);
+    }
+  };
+
   const fetchCoinSettings = async () => {
     try {
       const res = await getCoinSettings();
       if (res.data) {
         if (res.data.coinsPerRupee) setCoinsPerRupee(res.data.coinsPerRupee);
         if (res.data.maxPlaysPerDay) setMaxPlaysPerDay(res.data.maxPlaysPerDay);
+        if (res.data.referrerReward !== undefined) setReferrerReward(res.data.referrerReward);
+        if (res.data.referredReward !== undefined) setReferredReward(res.data.referredReward);
       }
     } catch (e) {
       console.error('Failed to fetch coin settings:', e);
@@ -242,8 +263,10 @@ export default function AppSettings() {
       await updateCoinSettings({
         coinsPerRupee: Number(coinsPerRupee),
         maxPlaysPerDay: Number(maxPlaysPerDay),
+        referrerReward: Number(referrerReward),
+        referredReward: Number(referredReward),
       });
-      message.success('Coin and Game settings updated successfully!');
+      message.success('Coin and Referral settings updated successfully!');
     } catch (e) {
       message.error(e.response?.data?.error || 'Failed to update coin settings');
     } finally {
@@ -251,8 +274,9 @@ export default function AppSettings() {
     }
   };
 
+
   const handleOrderWindowToggle = async (enabled) => {
-    setOrderWindowSaving(true);
+    setOrderStatusToggling(true);
     try {
       const res = await updateOrderWindow({
         orderWindowEnabled: enabled,
@@ -265,7 +289,7 @@ export default function AppSettings() {
     } catch (e) {
       message.error(e.response?.data?.error || 'Failed to update order window');
     } finally {
-      setOrderWindowSaving(false);
+      setOrderStatusToggling(false);
     }
   };
 
@@ -287,6 +311,41 @@ export default function AppSettings() {
       message.error(e.response?.data?.error || 'Failed to update');
     } finally {
       setOrderWindowSaving(false);
+    }
+  };
+
+  const [codToggling, setCodToggling] = useState(false);
+  const [onlineToggling, setOnlineToggling] = useState(false);
+
+  const handlePaymentToggle = async (type, enabled) => {
+    console.log(`[handlePaymentToggle] type=${type}, enabled=${enabled}, current codActive=${codActive}, current onlineActive=${onlineActive}`);
+    if (type === 'cod') {
+      setCodToggling(true);
+    } else {
+      setOnlineToggling(true);
+    }
+    const newCod = type === 'cod' ? enabled : codActive;
+    const newOnline = type === 'online' ? enabled : onlineActive;
+    const payload = {
+      codActive: newCod,
+      onlineActive: newOnline,
+    };
+    console.log('[handlePaymentToggle] Sending payload to new payment settings API:', payload);
+    try {
+      const res = await updatePaymentSettings(payload);
+      console.log('[handlePaymentToggle] New API response data:', res.data);
+      setCodActive(res.data.codActive !== false);
+      setOnlineActive(res.data.onlineActive !== false);
+      message.success(`${type.toUpperCase()} payment option updated!`);
+    } catch (e) {
+      console.error('[handlePaymentToggle] New API call failed:', e);
+      message.error('Failed to toggle payment method');
+    } finally {
+      if (type === 'cod') {
+        setCodToggling(false);
+      } else {
+        setOnlineToggling(false);
+      }
     }
   };
 
@@ -360,125 +419,13 @@ export default function AppSettings() {
   };
 
   return (
-    <div className="admin-page" style={{ maxWidth: 960 }}>
-      <div className="admin-page-intro">
-        <Paragraph type="secondary" style={{ marginBottom: 0 }}>
-          Manage APK, order window, and home screen hero slides in one place.
-        </Paragraph>
+    <div className="admin-page" style={{ maxWidth: 960, fontFamily: 'Inter, sans-serif' }}>
+      {/* Page Header */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#2D4060', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>Configuration</div>
+        <div style={{ fontSize: 22, fontWeight: 800, color: '#F1F5F9', letterSpacing: '-0.5px', marginBottom: 4 }}>App Settings</div>
+        <div style={{ fontSize: 13, color: '#4B6180' }}>Configure live store parameters, gamification, APK and hero slides</div>
       </div>
-
-      <Card
-        title={
-          <Space>
-            <AndroidOutlined style={{ fontSize: 22, color: '#3DDC84' }} />
-            <span>Android APK</span>
-          </Space>
-        }
-        style={{ marginBottom: 24 }}
-        styles={{ body: { paddingTop: 8 } }}
-      >
-        {apkInfo ? (
-          <div>
-            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-              <div>
-                <Text type="secondary">Current APK File:</Text>
-                <Title level={4} style={{ margin: '8px 0' }}>{apkInfo.name}</Title>
-              </div>
-              
-              <div>
-                <Space size="large">
-                  <div>
-                    <Text type="secondary">File Size:</Text>
-                    <br />
-                    <Text strong>{apkInfo.size}</Text>
-                  </div>
-                  {apkInfo.version && (
-                    <>
-                      <Divider type="vertical" style={{ height: 40 }} />
-                      <div>
-                        <Text type="secondary">Version:</Text>
-                        <br />
-                        <Text strong>{apkInfo.version}</Text>
-                      </div>
-                    </>
-                  )}
-                  <Divider type="vertical" style={{ height: 40 }} />
-                  <div>
-                    <Text type="secondary">Upload Date:</Text>
-                    <br />
-                    <Text strong>{new Date(apkInfo.uploadDate).toLocaleDateString()}</Text>
-                  </div>
-                  <Divider type="vertical" style={{ height: 40 }} />
-                  <div>
-                    <Text type="secondary">Status:</Text>
-                    <br />
-                    <Text strong style={{ color: '#52c41a' }}>Active</Text>
-                  </div>
-                </Space>
-              </div>
-
-              <Divider />
-
-              <Space>
-                <Button 
-                  type="primary" 
-                  icon={<UploadOutlined />}
-                  onClick={() => setApkInfo(null)}
-                >
-                  Upload New Version
-                </Button>
-                <Button 
-                  danger 
-                  icon={<DeleteOutlined />}
-                  onClick={handleDelete}
-                >
-                  Delete APK
-                </Button>
-              </Space>
-            </Space>
-          </div>
-        ) : (
-          <div>
-            <Paragraph>
-              Upload your Android APK file here. Users will be able to download this APK from the landing page.
-            </Paragraph>
-            
-            <Space direction="vertical" size="middle" style={{ width: '100%', marginBottom: 16 }}>
-              <div>
-                <Text strong>App Version:</Text>
-                <br />
-                <Input
-                  placeholder="e.g., 1.0.0"
-                  value={version}
-                  onChange={(e) => setVersion(e.target.value)}
-                  style={{ marginTop: 8, maxWidth: 200 }}
-                />
-                <Text type="secondary" style={{ display: 'block', marginTop: 4 }}>
-                  Version format: X.Y.Z (e.g., 1.0.0, 1.0.1, 1.1.0)
-                </Text>
-              </div>
-            </Space>
-            
-            <Upload {...uploadProps}>
-              <Button 
-                icon={<UploadOutlined />} 
-                loading={uploading}
-                size="large"
-              >
-                {uploading ? 'Uploading...' : 'Select APK File'}
-              </Button>
-            </Upload>
-            <Paragraph type="secondary" style={{ marginTop: 16 }}>
-              <ul style={{ paddingLeft: 20 }}>
-                <li>Only .apk files are accepted</li>
-                <li>Maximum file size: 100MB</li>
-                <li>Make sure the APK is signed and tested before uploading</li>
-                <li>Version number is required for update notifications</li>
-              </ul>
-            </Paragraph>
-          </div>
-        )}
-      </Card>
 
       <Card
         title={
@@ -502,35 +449,61 @@ export default function AppSettings() {
             )}
           </Space>
         }
-        style={{ marginBottom: 24 }}
-        styles={{ body: { paddingTop: 8 } }}
+        style={{ marginBottom: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.05)', borderRadius: 12 }}
+        styles={{ body: { paddingTop: 16 } }}
       >
         <Paragraph type="secondary" style={{ marginBottom: 16 }}>
-          Turn orders on/off and set the time window (IST). When off, users cannot place orders.
+          Turn orders on/off and set the active operating hours (IST). Users cannot check out outside these times.
         </Paragraph>
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <Text>Accept orders</Text>
+            <Text strong>Accept Orders Status:</Text>
             <Switch
               checked={orderWindowEnabled}
               onChange={handleOrderWindowToggle}
-              loading={orderWindowSaving}
+              loading={orderStatusToggling}
               checkedChildren="ON"
               unCheckedChildren="OFF"
             />
             <Text type="secondary">
               {ordersOpen ? (
-                <Text style={{ color: '#52c41a' }}>Orders are currently open</Text>
+                <Text style={{ color: '#52c41a', fontWeight: 600 }}>● Active (Orders open)</Text>
               ) : (
-                <Text style={{ color: '#ff4d4f' }}>Orders are currently closed</Text>
+                <Text style={{ color: '#ff4d4f', fontWeight: 600 }}>● Closed (Not accepting orders)</Text>
               )}
             </Text>
           </div>
-          <Divider style={{ margin: '8px 0' }} />
+          <Divider style={{ margin: '12px 0' }} />
           <div>
-            <Text strong style={{ display: 'block', marginBottom: 4 }}>Time window (IST, 24h)</Text>
-            <Paragraph type="secondary" style={{ marginTop: 0, marginBottom: 8, fontSize: 13 }}>
-              Only accept orders between these times. Use 00:00–23:59 for all day.
+            <Text strong style={{ display: 'block', marginBottom: 8 }}>Available Payment Channels</Text>
+            <Space size="large" wrap>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text>💵 Cash On Delivery (COD):</Text>
+                <Switch
+                  checked={codActive}
+                  onChange={(checked) => handlePaymentToggle('cod', checked)}
+                  loading={codToggling}
+                  checkedChildren="ACTIVE"
+                  unCheckedChildren="DISABLED"
+                />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Text>💳 Online Payments (Razorpay):</Text>
+                <Switch
+                  checked={onlineActive}
+                  onChange={(checked) => handlePaymentToggle('online', checked)}
+                  loading={onlineToggling}
+                  checkedChildren="ACTIVE"
+                  unCheckedChildren="DISABLED"
+                />
+              </div>
+            </Space>
+          </div>
+          <Divider style={{ margin: '12px 0' }} />
+          <div>
+            <Text strong style={{ display: 'block', marginBottom: 4 }}>Daily Operations Time Window (IST, 24h format)</Text>
+            <Paragraph type="secondary" style={{ marginTop: 0, marginBottom: 12, fontSize: 13 }}>
+              Orders will automatically be blocked outside these operating parameters. Use 00:00–23:59 for 24/7.
             </Paragraph>
             <Space wrap align="center">
               <Input
@@ -547,11 +520,82 @@ export default function AppSettings() {
                 style={{ width: 110 }}
               />
               <Button type="primary" onClick={handleOrderWindowTimeSave} loading={orderWindowSaving}>
-                Save times
+                Save operating window
               </Button>
             </Space>
           </div>
         </Space>
+      </Card>
+
+      <Card
+        title={
+          <Space>
+            <GiftOutlined style={{ fontSize: 22, color: '#fa8c16' }} />
+            <span>Coin & Referral Settings</span>
+          </Space>
+        }
+        style={{ marginBottom: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.05)', borderRadius: 12 }}
+        styles={{ body: { paddingTop: 16 } }}
+      >
+        <Paragraph type="secondary" style={{ marginBottom: 16 }}>
+          Set the conversion rate for coins, daily limits, and rewards for the Refer & Earn program.
+        </Paragraph>
+        <Row gutter={16}>
+          <Col xs={24} sm={12} md={6}>
+            <div style={{ marginBottom: 12 }}>
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>Coins Per Rupee (₹1 value):</Text>
+              <InputNumber
+                min={1}
+                value={coinsPerRupee}
+                onChange={setCoinsPerRupee}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <div style={{ marginBottom: 12 }}>
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>Max Plays Per Day:</Text>
+              <InputNumber
+                min={1}
+                value={maxPlaysPerDay}
+                onChange={setMaxPlaysPerDay}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <div style={{ marginBottom: 12 }}>
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>Referrer Reward (Coins):</Text>
+              <InputNumber
+                min={0}
+                value={referrerReward}
+                onChange={setReferrerReward}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </Col>
+          <Col xs={24} sm={12} md={6}>
+            <div style={{ marginBottom: 12 }}>
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>Referred User Reward (Coins):</Text>
+              <InputNumber
+                min={0}
+                value={referredReward}
+                onChange={setReferredReward}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </Col>
+        </Row>
+        <div style={{ marginTop: 8 }}>
+          <Button
+            type="primary"
+            onClick={handleCoinSettingsSave}
+            loading={coinsSaving}
+            icon={<SaveOutlined />}
+          >
+            Save Coin & Referral Settings
+          </Button>
+        </div>
       </Card>
 
       <Card
@@ -727,9 +771,12 @@ export default function AppSettings() {
                           STREAK_REWARD: 'orange',
                           DAILY_REWARD: 'purple',
                           COUPON_REDEMPTION: 'red',
-                          ADMIN_ADJUSTMENT: 'magenta'
+                          ADMIN_ADJUSTMENT: 'magenta',
+                          REFERRAL_BONUS: 'gold',
+                          REFERRAL_SIGNUP_BONUS: 'cyan'
                         };
                         return <Tag color={colors[type] || 'default'}>{type}</Tag>;
+
                       } 
                     },
                     { 
@@ -850,14 +897,14 @@ export default function AppSettings() {
             <Col xs={24} md={12} key={i}>
               <div
                 style={{
-                  border: '1px solid #e8e8e8',
+                  border: '1px solid rgba(255,255,255,0.06)',
                   borderRadius: 12,
                   padding: 16,
-                  background: '#fafafa',
+                  background: 'rgba(255,255,255,0.025)',
                   height: '100%',
                 }}
               >
-                <Text strong style={{ fontSize: 14, marginBottom: 8, display: 'block' }}>Slide {i + 1}</Text>
+                <Text strong style={{ fontSize: 13, marginBottom: 8, display: 'block', color: '#F1F5F9' }}>Slide {i + 1}</Text>
                 {heroSlides[i]?.image && (
                   <div
                     style={{

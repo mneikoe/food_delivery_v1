@@ -1,5 +1,5 @@
 const { validateEnv } = require("./src/config/env");
-// Validate environment variables before running any code
+// Validate environment variables before running any code   
 validateEnv();
 
 const app = require("./src/app");

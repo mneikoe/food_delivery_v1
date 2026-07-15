@@ -1,4 +1,6 @@
 {
   "coinsPerRupee": 10,
-  "maxPlaysPerDay": 50
+  "maxPlaysPerDay": 5,
+  "referrerReward": 100,
+  "referredReward": 50
 }

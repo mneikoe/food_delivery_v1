@@ -118,6 +118,16 @@ exports.verifyPayment = async (req, res) => {
       return res.status(400).json({ error: "Payment verification failed. Invalid signature." });
     }
 
+    let rzpPayload = req.body;
+    try {
+      const rzpPayment = await paymentService.fetchPayment(razorpayPaymentId);
+      if (rzpPayment) {
+        rzpPayload = { payment: { entity: rzpPayment } };
+      }
+    } catch (e) {
+      console.error("[PaymentController] Failed to fetch Razorpay payment info for verify:", e.message);
+    }
+
     // Transition state atomically to CAPTURED/SUCCESS
     const payment = await paymentStateEngine.transitionPayment({
       orderId,
@@ -126,7 +136,7 @@ exports.verifyPayment = async (req, res) => {
       razorpaySignature,
       eventName: "payment.verified",
       newStatus: "CAPTURED",
-      payload: req.body,
+      payload: rzpPayload,
       environment: process.env.NODE_ENV || "development",
     });
 

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { sendUserOtp, verifyUserOtp, loginUser, registerUser } from '../api/userApi';
+import { sendUserOtp, verifyUserOtp, loginUser, registerUser, verifyReferralCode } from '../api/userApi';
+
 
 export default function UserLogin() {
   const [authMode, setAuthMode] = useState('otp'); // 'otp' | 'password' | 'register'
@@ -14,14 +15,51 @@ export default function UserLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  
+  // Referral States
+  const [referralCode, setReferralCode] = useState('');
+  const [isReferralApplied, setIsReferralApplied] = useState(false);
+  const [referralVerifiedName, setReferralVerifiedName] = useState('');
+  const [showReferralField, setShowReferralField] = useState(false);
+  const [verifyingReferral, setVerifyingReferral] = useState(false);
+  const [referralError, setReferralError] = useState('');
+
   const navigate = useNavigate();
 
-  const clearMessages = () => { setError(''); setSuccess(''); };
+  const clearMessages = () => { setError(''); setSuccess(''); setReferralError(''); };
+
+
+  const handleVerifyReferral = async (e) => {
+    e.preventDefault();
+    if (!referralCode.trim()) return;
+    setVerifyingReferral(true);
+    setReferralError('');
+    setIsReferralApplied(false);
+    setReferralVerifiedName('');
+    try {
+      const res = await verifyReferralCode(referralCode.trim());
+      if (res.data?.success) {
+        setIsReferralApplied(true);
+        setReferralVerifiedName(res.data.name || 'User');
+      }
+    } catch (err) {
+      setReferralError(err.response?.data?.error || 'Invalid referral code');
+    } finally {
+      setVerifyingReferral(false);
+    }
+  };
 
   const handleSendOtp = async (e) => {
     e.preventDefault();
     clearMessages();
     if (!email) { setError('Enter your email address'); return; }
+    
+    // If a referral code was entered but not applied, tell them to verify it first, or ignore it if they clear it
+    if (referralCode.trim() && !isReferralApplied) {
+      setError('Please click Apply to verify the referral code, or clear it.');
+      return;
+    }
+
     setLoading(true);
     try {
       await sendUserOtp(email);
@@ -38,13 +76,14 @@ export default function UserLogin() {
     if (otp.length < 4) { setError('Enter the 4-digit OTP'); return; }
     setLoading(true);
     try {
-      await verifyUserOtp(email, otp);
+      await verifyUserOtp(email, otp, isReferralApplied ? referralCode.trim() : '');
       setSuccess('Login successful! 🎉');
       setTimeout(() => navigate('/user/app', { replace: true }), 400);
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid OTP');
     } finally { setLoading(false); }
   };
+
 
   const handlePasswordLogin = async (e) => {
     e.preventDefault();
@@ -146,7 +185,74 @@ export default function UserLogin() {
                       value={email} onChange={e => setEmail(e.target.value)} autoFocus required />
                   </div>
                 </div>
-                <button type="submit" className="ul-btn" disabled={loading}>
+
+                {!showReferralField ? (
+                  <button
+                    type="button"
+                    className="ul-text-btn"
+                    style={{ marginTop: 12, display: 'inline-block', fontSize: '13px', fontWeight: 600, color: '#f97316' }}
+                    onClick={() => setShowReferralField(true)}
+                  >
+                    🎁 Have a referral code?
+                  </button>
+                ) : (
+                  <div className="ul-field" style={{ marginTop: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <label className="ul-label" style={{ margin: 0 }}>Referral Code (Optional)</label>
+                      <button
+                        type="button"
+                        className="ul-text-btn"
+                        style={{ fontSize: '11px', color: '#64748b' }}
+                        onClick={() => {
+                          setShowReferralField(false);
+                          setReferralCode('');
+                          setIsReferralApplied(false);
+                          setReferralVerifiedName('');
+                          setReferralError('');
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        type="text"
+                        className="ul-input"
+                        style={{ flex: 1 }}
+                        placeholder="Enter referral code"
+                        value={referralCode}
+                        onChange={(e) => {
+                          setReferralCode(e.target.value.toUpperCase());
+                          setIsReferralApplied(false);
+                          setReferralVerifiedName('');
+                          setReferralError('');
+                        }}
+                        disabled={isReferralApplied}
+                      />
+                      <button
+                        type="button"
+                        className="ul-btn"
+                        style={{ width: 'auto', padding: '0 16px', background: isReferralApplied ? '#22c55e' : '#f97316' }}
+                        onClick={handleVerifyReferral}
+                        disabled={!referralCode || verifyingReferral || isReferralApplied}
+                      >
+                        {verifyingReferral ? '...' : isReferralApplied ? 'Applied' : 'Apply'}
+                      </button>
+                    </div>
+                    {referralError && (
+                      <span style={{ fontSize: '12px', color: '#ef4444', display: 'block', marginTop: 4 }}>
+                        ❌ {referralError}
+                      </span>
+                    )}
+                    {isReferralApplied && referralVerifiedName && (
+                      <span style={{ fontSize: '12px', color: '#22c55e', display: 'block', marginTop: 4, fontWeight: 600 }}>
+                        Ref code applied! Owner: {referralVerifiedName}
+                      </span>
+                    )}
+                  </div>
+                )}
+
+                <button type="submit" className="ul-btn" style={{ marginTop: 16 }} disabled={loading}>
                   {loading && <span className="ul-spin" />}
                   {loading ? 'Sending OTP...' : 'Send OTP →'}
                 </button>

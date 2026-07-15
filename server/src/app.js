@@ -117,6 +117,16 @@ app.get("/api/public/order-window", (req, res) => {
   }
 });
 
+// Public payment channels settings endpoint (no auth required)
+app.get("/api/public/payment-channels", (req, res) => {
+  try {
+    const paymentSettings = require("./utils/paymentSettings");
+    res.json(paymentSettings.getPaymentSettings());
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 // Public hero slides for app home screen (no auth required)
 app.get("/api/public/hero-slides", (req, res) => {
   try {
