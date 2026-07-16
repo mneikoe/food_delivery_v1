@@ -2,5 +2,7 @@
   "coinsPerRupee": 10,
   "maxPlaysPerDay": 5,
   "referrerReward": 100,
-  "referredReward": 50
+  "referredReward": 50,
+  "deliveryFee": 0,
+  "taxPercent": 0
 }

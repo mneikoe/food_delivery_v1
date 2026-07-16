@@ -8,12 +8,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://www.chatoraadda.in',
+        target: 'https://chatoraadda.in',
         changeOrigin: true,
         rewrite: (path) => path,
       },
       '/uploads': {
-        target: 'https://www.chatoraadda.in',
+        target: 'https://chatoraadda.in',
         changeOrigin: true,
         rewrite: (path) => path,
       },

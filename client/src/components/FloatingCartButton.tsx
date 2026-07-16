@@ -12,15 +12,24 @@ import LinearGradient from 'react-native-linear-gradient';
 interface Props {
   cartCount: number;
   cartTotal: number;
-  isVisible: boolean; // true = show, false = hide
+  isVisible: boolean;   // true = show, false = hide
+  bottomOffset: number; // dynamic: tab bar height + safe area + gap
   onPress: () => void;
 }
 
-export default function FloatingCartButton({ cartCount, cartTotal, isVisible, onPress }: Props) {
+export default function FloatingCartButton({
+  cartCount,
+  cartTotal,
+  isVisible,
+  bottomOffset,
+  onPress,
+}: Props) {
   const translateY = useRef(new Animated.Value(120)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const badgeScale = useRef(new Animated.Value(1)).current;
   const prevCount = useRef(0);
+  // Tracks whether animation has completed (used for pointer-events)
+  const isShown = useRef(false);
 
   // Slide in/out based on visibility
   useEffect(() => {
@@ -29,7 +38,11 @@ export default function FloatingCartButton({ cartCount, cartTotal, isVisible, on
       useNativeDriver: true,
       tension: 100,
       friction: 8,
-    }).start();
+    }).start(({ finished }) => {
+      if (finished) {
+        isShown.current = isVisible;
+      }
+    });
   }, [isVisible, translateY]);
 
   // Bounce button + badge when a new item is added
@@ -68,14 +81,25 @@ export default function FloatingCartButton({ cartCount, cartTotal, isVisible, on
     prevCount.current = cartCount;
   }, [cartCount, scaleAnim, badgeScale]);
 
-  if (!isVisible || cartCount === 0) return null;
+  // When not visible and cart is empty — render nothing so there's
+  // absolutely no touch interception
+  if (!isVisible && cartCount === 0) {
+    return null;
+  }
 
   return (
     <Animated.View
       style={[
         styles.container,
-        { transform: [{ translateY }, { scale: scaleAnim }] },
+        {
+          bottom: bottomOffset,
+          transform: [{ translateY }, { scale: scaleAnim }],
+        },
       ]}
+      // "box-none" lets touches pass through the animated container itself
+      // while still allowing the inner TouchableOpacity to receive touches.
+      // When sliding out (translateY = 120) the button is off-screen so it
+      // doesn't intercept anything regardless.
       pointerEvents={isVisible ? 'box-none' : 'none'}
     >
       <TouchableOpacity
@@ -126,15 +150,16 @@ export default function FloatingCartButton({ cartCount, cartTotal, isVisible, on
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    bottom: 80, // sit just above the tab bar (~60px) with 20px gap
+    // `bottom` is set dynamically via the `bottomOffset` prop
+    // (tab bar height + safe area insets + gap) — NOT hardcoded here.
     left: 16,
     right: 16,
-    zIndex: 1000,
-    elevation: 20,
+    zIndex: 999,
+    elevation: 16,
     shadowColor: '#FF6B35',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.45,
+    shadowRadius: 14,
   },
   touchable: {
     borderRadius: 16,

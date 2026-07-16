@@ -18,6 +18,7 @@ import { api } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../context/AlertContext';
 import { useNavigation, useFocusEffect, CommonActions } from '@react-navigation/native';
+import { useCart } from '../context/CartContext';
 
 const { width } = Dimensions.get('window');
 
@@ -28,6 +29,7 @@ export default function ProductDetailsScreen({ route }: any) {
   const { showAlert } = useAlert();
   const navigation = useNavigation();
   const { colors, tokens } = useTheme();
+  const { refreshCart } = useCart();
   const styles = getStyles(colors, tokens);
   
   const [reviews, setReviews] = useState<any[]>([]);
@@ -110,6 +112,7 @@ export default function ProductDetailsScreen({ route }: any) {
         productId: item._id,
         quantity: quantity,
       });
+      refreshCart();
       
       showAlert(
         'Success',

@@ -62,18 +62,22 @@ router.get("/orders/:id/track", userController.trackOrder);
 // Location
 router.post("/location/update", userController.updateLocation);
 
-// Gamification Ecosystem Routes
+// Gamification — Number Tap Game
+router.get("/game/status", gameController.getGameStatus);
 router.post("/game/start", gameController.startGame);
-router.post("/game/submit", gameController.submitGame);
+router.post("/game/end", gameController.endGame);
 router.post("/game/daily-reward/claim", gameController.claimDailyReward);
-router.post("/game/missions/claim", gameController.claimMissionReward);
-router.post("/game/streak/claim", gameController.claimStreakReward);
 router.get("/game/leaderboard", gameController.getLeaderboard);
 router.get("/game/dashboard", gameController.getDashboardInfo);
 router.get("/game/rewards", gameController.getRewardTiers);
 router.post("/game/redeem", gameController.redeemReward);
 
-// Game settings (legacy support fallback)
+// Legacy aliases (kept for backwards-compat so old app versions don't break)
+router.post("/game/submit", gameController.endGame);
+router.post("/game/missions/claim", gameController.claimMissionReward);
+router.post("/game/streak/claim", gameController.claimStreakReward);
+
+// Game settings (legacy fallback)
 router.get("/game-settings", userController.getGameSettings);
 
 // APK Info (public endpoint)

@@ -116,5 +116,6 @@ export const getPublicOrderWindow = () => userApi.get('/public/order-window');
 export const getPublicPaymentChannels = () => userApi.get('/public/payment-channels');
 export const getPublicHeroSlides = () => userApi.get('/public/hero-slides');
 export const updateUserLocation = (data) => userApi.post('/user/location/update', data);
+export const getUserGameSettings = () => userApi.get('/user/game-settings');
 
 export default userApi;

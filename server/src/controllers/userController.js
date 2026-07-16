@@ -328,17 +328,16 @@ exports.createOrder = async (req, res) => {
     }
 
     // Create order
-    const deliveryFee = 28;
+    const coinSettings = require("../utils/coinSettings");
+    const { deliveryFee, taxPercent, coinsPerRupee } = coinSettings.getCoinSettings();
     const subtotalWithFee = cart.subtotal + deliveryFee;
-    const tax = Math.ceil(subtotalWithFee * 0.05); // 5% tax
+    const tax = Math.ceil(subtotalWithFee * (taxPercent / 100));
     
-    // Calculate coin discount if requested (uses admin setting coinsPerRupee)
+    // Calculate coin discount if requested
     let coinDiscount = 0;
     let coinsRedeemed = 0;
 
     if (redeemCoins) {
-      const coinSettings = require("../utils/coinSettings");
-      const { coinsPerRupee } = coinSettings.getCoinSettings();
       const userCoins = user.coins || 0;
       const blocksOf100 = Math.floor(userCoins / 100);
       if (blocksOf100 > 0) {
@@ -386,7 +385,7 @@ exports.createOrder = async (req, res) => {
       await user.save();
     }
 
-    // Clear cart only if not paying online (online verification clears it later)
+    // Clear cart only if not paying online
     if (paymentMethod !== "RAZORPAY") {
       delete userCarts[userId];
     }
@@ -429,16 +428,15 @@ exports.previewOrder = async (req, res) => {
       }
     }
 
-    const deliveryFee = 28;
+    const coinSettings = require("../utils/coinSettings");
+    const { deliveryFee, taxPercent, coinsPerRupee } = coinSettings.getCoinSettings();
     const subtotalWithFee = cart.subtotal + deliveryFee;
-    const tax = Math.ceil(subtotalWithFee * 0.05);
+    const tax = Math.ceil(subtotalWithFee * (taxPercent / 100));
 
     let coinDiscount = 0;
     let coinsRedeemed = 0;
 
     if (redeemCoins) {
-      const coinSettings = require("../utils/coinSettings");
-      const { coinsPerRupee } = coinSettings.getCoinSettings();
       const userCoins = user.coins || 0;
       const blocksOf100 = Math.floor(userCoins / 100);
       if (blocksOf100 > 0) {
@@ -461,6 +459,7 @@ exports.previewOrder = async (req, res) => {
       subtotal: cart.subtotal,
       deliveryFee,
       tax,
+      taxPercent,
       discount,
       coinDiscount,
       coinsRedeemed,
@@ -788,6 +787,8 @@ exports.getGameSettings = async (req, res) => {
     const settings = coinSettings.getCoinSettings();
     res.json({
       maxPlaysPerDay: settings.maxPlaysPerDay || 5,
+      deliveryFee: settings.deliveryFee !== undefined ? settings.deliveryFee : 28,
+      taxPercent: settings.taxPercent !== undefined ? settings.taxPercent : 5,
     });
   } catch (error) {
     res.status(400).json({ error: error.message });

@@ -1,12 +1,12 @@
 node_modules/
-.env
+
 .DS_Store
 
 
 # APK uploads
-server/uploads/
-server/apk-info.json
-server/order-window.json
+# server/uploads/
+# server/apk-info.json
+# server/order-window.json
 
 
 # Web build artifacts

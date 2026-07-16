@@ -1,60 +1,71 @@
 const crypto = require("crypto");
-const mongoose = require("mongoose");
 const User = require("../models/User");
 const GameEconomySettings = require("../models/GameEconomySettings");
 const RewardTier = require("../models/RewardTier");
 const CoinTransaction = require("../models/CoinTransaction");
 const CouponRedemption = require("../models/CouponRedemption");
 const GameSession = require("../models/GameSession");
-const MissionTemplate = require("../models/MissionTemplate");
-const UserMissionProgress = require("../models/UserMissionProgress");
 const GamePlayTracker = require("../models/GamePlayTracker");
-const UserStreak = require("../models/UserStreak");
-const GameResult = require("../models/GameResult");
 const Coupon = require("../models/Coupon");
 const pushService = require("../services/pushService");
 
-// Helper: Get or create singleton settings
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+/** Get or create singleton economy settings */
 async function getEconomySettings() {
   let settings = await GameEconomySettings.findOne({ isActive: true });
   if (!settings) {
+    // No document at all — create fresh with new defaults
     settings = new GameEconomySettings({
-      maxDailyPlays: 5,
-      coinsPerTreat: 5,
-      goldenBoneSpawnChance: 0.05,
-      goldenBoneReward: 25,
-      streakRewards: { "1": 10, "2": 15, "3": 20, "4": 25, "5": 30, "6": 35, "7": 50 },
+      attemptsPerSession: 10,
+      coinsPerCorrect: 2,
+      maxSessionsPerDay: 3,
+      bonusCoins: 5,
       weeklyCoinRedemptionLimit: 500,
       dailyRewardAmount: 10,
-      maxCoinsPerGame: 50,
-      isActive: true
+      isActive: true,
     });
     await settings.save();
+    return settings;
   }
+
+  // ── Migration: old document may have legacy JumpGame fields ──────────
+  // If new Number Tap fields are missing/undefined, patch them in and save.
+  let needsSave = false;
+  const DEFAULTS = {
+    attemptsPerSession: 10,
+    coinsPerCorrect: 2,
+    maxSessionsPerDay: 3,
+    bonusCoins: 5,
+    weeklyCoinRedemptionLimit: 500,
+    dailyRewardAmount: 10,
+  };
+  for (const [key, defaultVal] of Object.entries(DEFAULTS)) {
+    if (settings[key] === undefined || settings[key] === null) {
+      settings[key] = defaultVal;
+      needsSave = true;
+    }
+  }
+  if (needsSave) {
+    await settings.save();
+    console.log('[GameEconomy] Migrated legacy settings document to Number Tap schema.');
+  }
+
   return settings;
 }
 
-// Helper: Format date to local YYYY-MM-DD
+/** Returns local date string YYYY-MM-DD */
 function getLocalDateString() {
   const d = new Date();
-  const tzOffset = d.getTimezoneOffset() * 60000; // in milliseconds
-  const localISOTime = (new Date(d.getTime() - tzOffset)).toISOString().slice(0, 10);
-  return localISOTime;
+  // Using en-CA locale forces YYYY-MM-DD output reliably in the local system timezone
+  return d.toLocaleDateString('en-CA');
 }
 
-// Helper: Log coin transaction and update user's cached coin balance
+/** Logs a coin transaction and updates User.coins cache atomically */
 async function recordCoinTransaction({ userId, type, coins, source, referenceId = null, metadata = {} }) {
-  const transaction = new CoinTransaction({
-    userId,
-    type,
-    coins,
-    source,
-    referenceId,
-    metadata
-  });
+  const transaction = new CoinTransaction({ userId, type, coins, source, referenceId, metadata });
   await transaction.save();
 
-  // Update User.coins directly (Double entry cache)
   const user = await User.findById(userId);
   if (user) {
     user.coins = Math.max(0, (user.coins || 0) + coins);
@@ -63,579 +74,390 @@ async function recordCoinTransaction({ userId, type, coins, source, referenceId 
   return transaction;
 }
 
-// Starts a new game session
+// ─── Game Status ─────────────────────────────────────────────────────────────
+
+/**
+ * GET /user/game/status
+ * Returns: settings + how many sessions user played today + coins
+ */
+exports.getGameStatus = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const today = getLocalDateString();
+    const settings = await getEconomySettings();
+
+    const tracker = await GamePlayTracker.findOne({ userId, date: today });
+    const sessionsPlayedToday = tracker ? tracker.plays : 0;
+
+    const user = await User.findById(userId);
+    const userCoins = user ? (user.coins || 0) : 0;
+
+    // Next reward tier progress
+    const nextRewardTier = await RewardTier.findOne({
+      isActive: true,
+      coinsRequired: { $gt: userCoins },
+    }).sort({ coinsRequired: 1 });
+
+    let nextReward = null;
+    if (nextRewardTier) {
+      nextReward = {
+        title: nextRewardTier.title,
+        coinsNeeded: nextRewardTier.coinsRequired - userCoins,
+        coinsRequired: nextRewardTier.coinsRequired,
+        couponValue: nextRewardTier.couponValue,
+      };
+    }
+
+    res.json({
+      isActive: settings.isActive,
+      attemptsPerSession: settings.attemptsPerSession,
+      coinsPerCorrect: settings.coinsPerCorrect,
+      maxSessionsPerDay: settings.maxSessionsPerDay,
+      bonusCoins: settings.bonusCoins,
+      sessionsPlayedToday,
+      sessionsRemaining: Math.max(0, settings.maxSessionsPerDay - sessionsPlayedToday),
+      coins: userCoins,
+      nextReward,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// ─── Start Game Session ───────────────────────────────────────────────────────
+
+/**
+ * POST /user/game/start
+ * Creates a new ACTIVE session. Enforces maxSessionsPerDay limit.
+ * Returns sessionId + settings so client knows how many attempts to give.
+ */
 exports.startGame = async (req, res) => {
   try {
     const userId = req.user._id;
     const today = getLocalDateString();
     const settings = await getEconomySettings();
 
-    // 1. Validate and Increment Daily Play Limits
-    let playTracker = await GamePlayTracker.findOneAndUpdate(
+    if (!settings.isActive) {
+      return res.status(403).json({ error: "Game is currently disabled by admin." });
+    }
+
+    // Check + increment daily session count atomically
+    let tracker = await GamePlayTracker.findOneAndUpdate(
       { userId, date: today },
       { $inc: { plays: 1 } },
       { new: true, upsert: true }
     );
 
-    if (playTracker.plays > settings.maxDailyPlays) {
-      // Rollback increment if it exceeds limits
-      await GamePlayTracker.updateOne(
-        { userId, date: today },
-        { $inc: { plays: -1 } }
-      );
-      return res.status(403).json({ error: "Daily play limit reached. Come back tomorrow!" });
+    if (tracker.plays > settings.maxSessionsPerDay) {
+      // Roll back the increment
+      await GamePlayTracker.updateOne({ userId, date: today }, { $inc: { plays: -1 } });
+      return res.status(403).json({
+        error: `Daily session limit reached (${settings.maxSessionsPerDay} sessions/day). Come back tomorrow!`,
+      });
     }
 
-    const currentPlaysCount = playTracker.plays;
-
-    // 2. Fetch or initialize Streak
-    let userStreak = await UserStreak.findOne({ userId });
-    if (!userStreak) {
-      userStreak = new UserStreak({ userId });
-    }
-
-    // Check if streak was missed/broken (last play date was before yesterday)
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().slice(0, 10);
-
-    if (userStreak.lastPlayDate && userStreak.lastPlayDate !== today && userStreak.lastPlayDate !== yesterdayStr) {
-      userStreak.currentStreak = 0;
-      userStreak.claimedStreakToday = false;
-      await userStreak.save();
-    }
-
-    // 3. Generate secure game session ID
+    // Create new session
     const sessionId = crypto.randomBytes(16).toString("hex");
     const session = new GameSession({
       userId,
       sessionId,
       status: "ACTIVE",
-      startedAt: new Date()
+      gameType: "NUMBER_TAP",
+      totalAttempts: settings.attemptsPerSession,
+      startedAt: new Date(),
     });
     await session.save();
 
-    // 4. Initialize Active Daily Missions for user
-    const activeTemplates = await MissionTemplate.find({ isActive: true });
-    const activeMissions = [];
-    for (const temp of activeTemplates) {
-      let progressDoc = await UserMissionProgress.findOne({
-        userId,
-        date: today,
-        missionId: temp._id
-      });
-      if (!progressDoc) {
-        progressDoc = new UserMissionProgress({
-          userId,
-          date: today,
-          missionId: temp._id,
-          progress: 0,
-          claimed: false
-        });
-        try {
-          await progressDoc.save();
-        } catch (e) {
-          // unique compound key handling in race conditions
-          progressDoc = await UserMissionProgress.findOne({
-            userId,
-            date: today,
-            missionId: temp._id
-          });
-        }
-      }
-      activeMissions.push({
-        _id: progressDoc._id,
-        name: temp.name,
-        type: temp.type,
-        target: temp.target,
-        difficulty: temp.difficulty,
-        rewardCoins: temp.rewardCoins,
-        progress: progressDoc.progress,
-        claimed: progressDoc.claimed
-      });
-    }
-
-    // 5. Get next Reward Tier progress helper
-    const user = await User.findById(userId);
-    const userCoins = user ? (user.coins || 0) : 0;
-    const nextRewardTier = await RewardTier.findOne({
-      isActive: true,
-      coinsRequired: { $gt: userCoins }
-    }).sort({ coinsRequired: 1 });
-
-    let nextReward = null;
-    if (nextRewardTier) {
-      nextReward = {
-        title: nextRewardTier.title,
-        coinsNeeded: nextRewardTier.coinsRequired - userCoins,
-        coinsRequired: nextRewardTier.coinsRequired,
-        couponValue: nextRewardTier.couponValue
-      };
-    }
-
     res.json({
       sessionId,
-      currentStreak: userStreak.currentStreak,
-      remainingPlays: Math.max(0, settings.maxDailyPlays - currentPlaysCount),
-      activeMissions,
-      nextReward
+      attemptsPerSession: settings.attemptsPerSession,
+      coinsPerCorrect: settings.coinsPerCorrect,
+      bonusCoins: settings.bonusCoins,
+      sessionsRemaining: Math.max(0, settings.maxSessionsPerDay - tracker.plays),
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 };
 
-// Submits the game score and rewards the user authoritative coins
-exports.submitGame = async (req, res) => {
+// ─── End Game Session ─────────────────────────────────────────────────────────
+
+/**
+ * POST /user/game/end
+ * Body: { sessionId, correctClicks, totalAttempts }
+ *
+ * Server validates:
+ *  - Session exists and belongs to this user
+ *  - Session is ACTIVE (not already submitted / expired)
+ *  - Session started within allowed timeout (10 min)
+ *  - correctClicks <= totalAttempts (plausibility)
+ *  - totalAttempts matches what server issued (anti-cheat)
+ *
+ * Coin calculation:
+ *  coins = correctClicks * coinsPerCorrect
+ *  + bonusCoins (only if correctClicks === totalAttempts, i.e. perfect session)
+ */
+exports.endGame = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { sessionId, score, duration, treatsCaught } = req.body;
-    const today = getLocalDateString();
+    const { sessionId, correctClicks, totalAttempts } = req.body;
 
-    if (!sessionId || typeof score !== 'number' || typeof duration !== 'number' || typeof treatsCaught !== 'number') {
-      return res.status(400).json({ error: "Invalid payload parameters" });
+    // Basic payload validation
+    if (
+      !sessionId ||
+      typeof correctClicks !== "number" ||
+      typeof totalAttempts !== "number" ||
+      correctClicks < 0 ||
+      totalAttempts < 1
+    ) {
+      return res.status(400).json({ error: "Invalid payload" });
     }
 
-    // 1. Verify Active Session
+    // Fetch session
     const session = await GameSession.findOne({ sessionId, userId });
     if (!session) {
       return res.status(404).json({ error: "Game session not found" });
     }
     if (session.status !== "ACTIVE") {
-      return res.status(403).json({ error: "Session has already been processed or expired" });
+      return res.status(403).json({ error: "Session already processed or expired" });
     }
 
-    // Session duration timeout verification (e.g. max 5 minutes)
-    const elapsedMinutes = (new Date() - session.startedAt) / 60000;
-    if (elapsedMinutes > 5) {
+    // Timeout check: session must be submitted within 10 minutes
+    const elapsedMin = (Date.now() - session.startedAt.getTime()) / 60000;
+    if (elapsedMin > 10) {
       session.status = "EXPIRED";
       await session.save();
-      return res.status(403).json({ error: "Game session expired (timeout)" });
-    }
-
-    // 2. Telemetry and Score Plausibility check
-    const normalizedDuration = Math.max(1, duration);
-    const maxPossibleCatches = Math.floor(normalizedDuration * 4) + 5;
-    if (treatsCaught > maxPossibleCatches) {
-      return res.status(400).json({ error: "Suspicious score submission flagged" });
+      return res.status(403).json({ error: "Session expired (10 minute timeout)" });
     }
 
     const settings = await getEconomySettings();
 
-    // 3. Roll Server Golden Bone Spawn Chance (5%)
-    let goldenBoneCollected = false;
-    let goldenBoneCoins = 0;
-    if (treatsCaught > 0) {
-      const roll = Math.random();
-      if (roll < settings.goldenBoneSpawnChance) {
-        goldenBoneCollected = true;
-        goldenBoneCoins = settings.goldenBoneReward;
-      }
+    // Anti-cheat: totalAttempts from client must match what server issued
+    if (totalAttempts !== session.totalAttempts) {
+      return res.status(400).json({ error: "Suspicious payload — attempts mismatch" });
     }
 
-    // 4. Calculate Coins
-    const baseCoins = treatsCaught * settings.coinsPerTreat;
-    let totalCoinsEarned = baseCoins + goldenBoneCoins;
+    // Anti-cheat: can't have more correct clicks than total attempts
+    const safeCorrect = Math.min(correctClicks, session.totalAttempts);
 
-    // Cap maximum coins earned per game session
-    const maxCoinsPerGame = settings.maxCoinsPerGame || 50;
-    if (totalCoinsEarned > maxCoinsPerGame) {
-      totalCoinsEarned = maxCoinsPerGame;
-    }
+    // Coin calculation
+    const earnedFromClicks = safeCorrect * settings.coinsPerCorrect;
+    const isPerfect = safeCorrect === session.totalAttempts;
+    const bonus = isPerfect ? settings.bonusCoins : 0;
+    const totalCoins = earnedFromClicks + bonus;
 
-    // 5. Play Limits checked and incremented in startGame to prevent session creation bypass
-    // No increment here to prevent double-counting.
-
-    // 6. Update Streak Date
-    let userStreak = await UserStreak.findOne({ userId });
-    if (!userStreak) {
-      userStreak = new UserStreak({ userId });
-    }
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().slice(0, 10);
-
-    let streakIncremented = false;
-    if (userStreak.lastPlayDate === yesterdayStr) {
-      userStreak.currentStreak += 1;
-      userStreak.claimedStreakToday = false;
-      streakIncremented = true;
-    } else if (userStreak.lastPlayDate !== today) {
-      userStreak.currentStreak = 1;
-      userStreak.claimedStreakToday = false;
-      streakIncremented = true;
-    }
-    userStreak.lastPlayDate = today;
-    await userStreak.save();
-
-    // 7. Save Game Result record (with indexing support)
-    const gameResult = new GameResult({
-      userId,
-      score,
-      duration,
-      treatsCaught,
-      coinsEarned: totalCoinsEarned,
-      date: today
-    });
-    await gameResult.save();
-
-    // 8. Update Session document
+    // Update and close session
     session.status = "SUBMITTED";
     session.submittedAt = new Date();
-    session.score = score;
-    session.coinsAwarded = totalCoinsEarned;
+    session.correctClicks = safeCorrect;
+    session.coinsAwarded = totalCoins;
     await session.save();
 
-    // 9. Record Coin Transaction (GAME_REWARD type)
-    if (totalCoinsEarned > 0) {
+    // Record coin transaction and update User.coins
+    if (totalCoins > 0) {
       await recordCoinTransaction({
         userId,
         type: "GAME_REWARD",
-        coins: totalCoinsEarned,
-        source: "Feed the Puppy Gameplay",
-        referenceId: gameResult._id,
-        metadata: { score, treatsCaught, goldenBoneCollected }
+        coins: totalCoins,
+        source: "Number Tap Game",
+        referenceId: session._id,
+        metadata: {
+          correctClicks: safeCorrect,
+          totalAttempts: session.totalAttempts,
+          isPerfect,
+          bonusCoins: bonus,
+        },
       });
 
-      // Dispatch automated coins earned push notification
+      // Push notification
       try {
         const user = await User.findById(userId);
         if (user && user.fcmTokens && user.fcmTokens.length > 0) {
-          const gamePref = user.notificationSettings ? user.notificationSettings.gameNotifications !== false : true;
+          const gamePref =
+            user.notificationSettings
+              ? user.notificationSettings.gameNotifications !== false
+              : true;
           if (gamePref) {
+            const msg = isPerfect
+              ? `Perfect game! 🎯 ${safeCorrect}/${session.totalAttempts} correct. You earned +🪙${totalCoins} (includes ${bonus} bonus)!`
+              : `Good job! 🎯 ${safeCorrect}/${session.totalAttempts} correct. You earned +🪙${totalCoins} Chatora Coins!`;
             await pushService.sendPushNotification(
-              user.fcmTokens.map(t => t.token),
+              user.fcmTokens.map((t) => t.token),
               {
-                title: "🪙 Coins Earned! Good Job!",
-                body: `You jumped over ${score} barriers and earned +🪙${totalCoinsEarned} Chatora Coins!`,
-                data: { type: "GAME" }
+                title: "🪙 Coins Earned!",
+                body: msg,
+                data: { type: "GAME" },
               },
               userId
             );
           }
         }
       } catch (err) {
-        console.error("[Game Push Alert] Failed to dispatch gameplay alert:", err.message);
-      }
-    }
-
-    // 10. Increment Active Missions Progress
-    await UserMissionProgress.updateMany(
-      { userId, date: today, claimed: false },
-      { $inc: { progress: 1 } },
-      { multi: true } // Handles PLAY_GAME types dynamically
-    );
-    // Fetch and check other missions progress
-    const activeProgresses = await UserMissionProgress.find({ userId, date: today, claimed: false }).populate("missionId");
-    for (const prog of activeProgresses) {
-      const template = prog.missionId;
-      if (!template) continue;
-      
-      let updatedProgress = prog.progress;
-      if (template.type === 'PLAY_GAME') {
-        // Increment handled above
-      } else if (template.type === 'SCORE_TARGET') {
-        if (score >= template.target) {
-          updatedProgress = template.target;
-        }
-      } else if (template.type === 'COLLECT_GOLDEN_BONE') {
-        if (goldenBoneCollected) {
-          updatedProgress = Math.min(template.target, prog.progress + 1);
-        }
-      } else if (template.type === 'COMBO_TARGET') {
-        // Estimate combo achievability based on score multiplier ratios
-        const ratio = score / (treatsCaught || 1);
-        if (ratio >= 1.5 && score >= template.target) {
-          updatedProgress = Math.min(template.target, prog.progress + 1);
-        }
-      }
-
-      if (updatedProgress !== prog.progress) {
-        prog.progress = updatedProgress;
-        await prog.save();
+        console.error("[Game Push] Failed to send notification:", err.message);
       }
     }
 
     const updatedUser = await User.findById(userId);
     res.json({
-      coinsEarned: totalCoinsEarned,
-      goldenBoneCollected,
-      streakUpdated: userStreak.currentStreak,
-      score,
-      newBalance: updatedUser ? (updatedUser.coins || 0) : 0
+      coinsEarned: totalCoins,
+      correctClicks: safeCorrect,
+      totalAttempts: session.totalAttempts,
+      isPerfect,
+      bonusCoins: bonus,
+      newBalance: updatedUser ? updatedUser.coins || 0 : 0,
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 };
 
-// Claims the daily free reward check-in
+// ─── Daily Reward ─────────────────────────────────────────────────────────────
+
+/**
+ * POST /user/game/daily-reward/claim
+ * Free daily coin check-in (independent of game plays)
+ */
 exports.claimDailyReward = async (req, res) => {
   try {
     const userId = req.user._id;
     const today = getLocalDateString();
     const settings = await getEconomySettings();
 
-    // Check if duplicate daily claim exists
-    const existingTransaction = await CoinTransaction.findOne({
+    const alreadyClaimed = await CoinTransaction.findOne({
       userId,
       type: "DAILY_REWARD",
       createdAt: {
         $gte: new Date(today + "T00:00:00.000Z"),
-        $lte: new Date(today + "T23:59:59.999Z")
-      }
+        $lte: new Date(today + "T23:59:59.999Z"),
+      },
     });
-
-    if (existingTransaction) {
-      return res.status(403).json({ error: "Daily free reward already claimed today!" });
+    if (alreadyClaimed) {
+      return res.status(403).json({ error: "Daily reward already claimed today!" });
     }
 
-    // Award daily coins
-    const transaction = await recordCoinTransaction({
+    await recordCoinTransaction({
       userId,
       type: "DAILY_REWARD",
       coins: settings.dailyRewardAmount,
-      source: "Daily Check-In Reward"
+      source: "Daily Check-In Reward",
     });
 
     const user = await User.findById(userId);
 
-    // Dispatch check-in alert push notification
     try {
       if (user && user.fcmTokens && user.fcmTokens.length > 0) {
-        const gamePref = user.notificationSettings ? user.notificationSettings.gameNotifications !== false : true;
-        if (gamePref) {
-          await pushService.sendPushNotification(
-            user.fcmTokens.map(t => t.token),
-            {
-              title: "🎁 Daily Reward Claimed!",
-              body: `Success! You claimed +🪙${settings.dailyRewardAmount} Chatora Coins! Play today to keep your streak active.`,
-              data: { type: "COUPON" }
-            },
-            userId
-          );
-        }
+        await pushService.sendPushNotification(
+          user.fcmTokens.map((t) => t.token),
+          {
+            title: "🎁 Daily Reward Claimed!",
+            body: `You claimed +🪙${settings.dailyRewardAmount} Chatora Coins! Play the Number Tap game to earn more.`,
+            data: { type: "COUPON" },
+          },
+          userId
+        );
       }
     } catch (err) {
-      console.error("[Daily Reward Push Alert] Failed to send check-in push:", err.message);
+      console.error("[Daily Reward Push] Failed:", err.message);
     }
 
     res.json({
       success: true,
       coinsClaimed: settings.dailyRewardAmount,
-      newBalance: user ? (user.coins || 0) : 0
+      newBalance: user ? user.coins || 0 : 0,
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 };
 
-// Claims completed mission reward coins
-exports.claimMissionReward = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const { missionProgressId } = req.body;
+// ─── Leaderboard ──────────────────────────────────────────────────────────────
 
-    const progress = await UserMissionProgress.findOne({ _id: missionProgressId, userId }).populate("missionId");
-    if (!progress) {
-      return res.status(404).json({ error: "Mission progress record not found" });
-    }
-    if (progress.claimed) {
-      return res.status(400).json({ error: "Mission reward has already been claimed" });
-    }
-    const template = progress.missionId;
-    if (!template || progress.progress < template.target) {
-      return res.status(400).json({ error: "Mission goals not met yet" });
-    }
-
-    // Update to claimed
-    progress.claimed = true;
-    await progress.save();
-
-    // Award coins and log transaction
-    await recordCoinTransaction({
-      userId,
-      type: "MISSION_REWARD",
-      coins: template.rewardCoins,
-      source: `Daily Mission: ${template.name}`,
-      referenceId: progress._id
-    });
-
-    const user = await User.findById(userId);
-    res.json({
-      success: true,
-      coinsClaimed: template.rewardCoins,
-      newBalance: user ? (user.coins || 0) : 0
-    });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// Claims Daily Streak Milestone rewards
-exports.claimStreakReward = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const userStreak = await UserStreak.findOne({ userId });
-    if (!userStreak || userStreak.currentStreak === 0) {
-      return res.status(400).json({ error: "No active streak found" });
-    }
-    if (userStreak.claimedStreakToday) {
-      return res.status(403).json({ error: "Streak reward already claimed today!" });
-    }
-
-    const settings = await getEconomySettings();
-    const streakDayKey = String(userStreak.currentStreak % 7 || 7);
-    const rewardCoins = settings.streakRewards.get(streakDayKey) || 10;
-
-    userStreak.claimedStreakToday = true;
-    await userStreak.save();
-
-    await recordCoinTransaction({
-      userId,
-      type: "STREAK_REWARD",
-      coins: rewardCoins,
-      source: `Day ${userStreak.currentStreak} Streak Reward`
-    });
-
-    const user = await User.findById(userId);
-
-    // Dispatch streak reward alert push notification
-    try {
-      if (user && user.fcmTokens && user.fcmTokens.length > 0) {
-        const gamePref = user.notificationSettings ? user.notificationSettings.gameNotifications !== false : true;
-        if (gamePref) {
-          await pushService.sendPushNotification(
-            user.fcmTokens.map(t => t.token),
-            {
-              title: "🔥 Streak Bonus Claimed!",
-              body: `Fantastic! You claimed your Day ${userStreak.currentStreak} Streak reward of +🪙${rewardCoins} Chatora Coins!`,
-              data: { type: "GAME" }
-            },
-            userId
-          );
-        }
-      }
-    } catch (err) {
-      console.error("[Streak Push Alert] Failed to dispatch streak reward alert:", err.message);
-    }
-
-    res.json({
-      success: true,
-      coinsClaimed: rewardCoins,
-      newBalance: user ? (user.coins || 0) : 0
-    });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// Dynamic Daily / Weekly Leaderboard rankings generated from GameResult records
+/**
+ * GET /user/game/leaderboard?type=DAILY|WEEKLY
+ * Top 20 users by coins earned from game sessions
+ */
 exports.getLeaderboard = async (req, res) => {
   try {
-    const { type = 'DAILY' } = req.query; // 'DAILY' or 'WEEKLY'
+    const { type = "DAILY" } = req.query;
     const today = getLocalDateString();
-    
-    let matchQuery = {};
-    if (type === 'DAILY') {
-      matchQuery.date = today;
+
+    let matchQuery = { status: "SUBMITTED", gameType: "NUMBER_TAP" };
+    if (type === "DAILY") {
+      const start = new Date(today + "T00:00:00.000Z");
+      const end = new Date(today + "T23:59:59.999Z");
+      matchQuery.submittedAt = { $gte: start, $lte: end };
     } else {
-      // Last 7 days
       const cutOff = new Date();
       cutOff.setDate(cutOff.getDate() - 7);
-      matchQuery.timestamp = { $gte: cutOff };
+      matchQuery.submittedAt = { $gte: cutOff };
     }
 
-    // Aggregate highest score per user
-    const rankings = await GameResult.aggregate([
+    const rankings = await GameSession.aggregate([
       { $match: matchQuery },
-      { $group: { _id: "$userId", maxScore: { $max: "$score" } } },
-      { $sort: { maxScore: -1 } },
+      { $group: { _id: "$userId", totalCoins: { $sum: "$coinsAwarded" } } },
+      { $sort: { totalCoins: -1 } },
       { $limit: 20 },
-      // Lookup username
       {
         $lookup: {
           from: "users",
           localField: "_id",
           foreignField: "_id",
-          as: "user"
-        }
+          as: "user",
+        },
       },
       { $unwind: "$user" },
       {
         $project: {
           _id: 1,
-          maxScore: 1,
-          username: "$user.name"
-        }
-      }
+          totalCoins: 1,
+          username: "$user.name",
+        },
+      },
     ]);
 
-    res.json(rankings.map((item, idx) => ({
-      rank: idx + 1,
-      userId: item._id,
-      username: item.username,
-      score: item.maxScore
-    })));
+    res.json(
+      rankings.map((item, idx) => ({
+        rank: idx + 1,
+        userId: item._id,
+        username: item.username,
+        coinsEarned: item.totalCoins,
+      }))
+    );
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 };
 
-// Fetches the game dashboard summary stats
+// ─── Dashboard Info ───────────────────────────────────────────────────────────
+
+/**
+ * GET /user/game/dashboard
+ * Summary for the game screen header
+ */
 exports.getDashboardInfo = async (req, res) => {
   try {
     const userId = req.user._id;
     const today = getLocalDateString();
     const settings = await getEconomySettings();
 
-    // 1. Load User Coins
     const user = await User.findById(userId);
-    const userCoins = user ? (user.coins || 0) : 0;
+    const userCoins = user ? user.coins || 0 : 0;
 
-    // 2. Load Streak
-    let userStreak = await UserStreak.findOne({ userId });
-    if (!userStreak) {
-      userStreak = new UserStreak({ userId, currentStreak: 0, claimedStreakToday: false });
-    }
+    const tracker = await GamePlayTracker.findOne({ userId, date: today });
+    const sessionsPlayedToday = tracker ? tracker.plays : 0;
 
-    // 3. Load daily reward claim state
-    const todayClaimTransaction = await CoinTransaction.findOne({
+    const todayClaim = await CoinTransaction.findOne({
       userId,
       type: "DAILY_REWARD",
       createdAt: {
         $gte: new Date(today + "T00:00:00.000Z"),
-        $lte: new Date(today + "T23:59:59.999Z")
-      }
+        $lte: new Date(today + "T23:59:59.999Z"),
+      },
     });
 
-    // 4. Load Active Missions
-    const activeTemplates = await MissionTemplate.find({ isActive: true });
-    const missions = [];
-    let completedCount = 0;
-    for (const temp of activeTemplates) {
-      const progressDoc = await UserMissionProgress.findOne({ userId, date: today, missionId: temp._id });
-      const progressVal = progressDoc ? progressDoc.progress : 0;
-      const claimedVal = progressDoc ? progressDoc.claimed : false;
-      if (progressVal >= temp.target) completedCount++;
-      missions.push({
-        progressId: progressDoc ? progressDoc._id : null,
-        name: temp.name,
-        type: temp.type,
-        target: temp.target,
-        progress: progressVal,
-        claimed: claimedVal,
-        rewardCoins: temp.rewardCoins
-      });
-    }
-
-    // 5. Get Today's Best Score
-    const bestResult = await GameResult.findOne({ userId, date: today }).sort({ score: -1 });
-
-    // 6. Next reward progress info
     const nextRewardTier = await RewardTier.findOne({
       isActive: true,
-      coinsRequired: { $gt: userCoins }
+      coinsRequired: { $gt: userCoins },
     }).sort({ coinsRequired: 1 });
 
     let nextReward = null;
@@ -644,128 +466,42 @@ exports.getDashboardInfo = async (req, res) => {
         title: nextRewardTier.title,
         coinsNeeded: nextRewardTier.coinsRequired - userCoins,
         coinsRequired: nextRewardTier.coinsRequired,
-        couponValue: nextRewardTier.couponValue
+        couponValue: nextRewardTier.couponValue,
       };
     }
 
-    // 7. Get user's today rank
-    let rankStr = "N/A";
-    const dailyRankings = await GameResult.aggregate([
-      { $match: { date: today } },
-      { $group: { _id: "$userId", maxScore: { $max: "$score" } } },
-      { $sort: { maxScore: -1 } }
-    ]);
-    const userRankIdx = dailyRankings.findIndex(r => r._id.toString() === userId.toString());
-    if (userRankIdx !== -1) {
-      rankStr = `#${userRankIdx + 1}`;
-    }
+    // Best session today
+    const bestSession = await GameSession.findOne({
+      userId,
+      gameType: "NUMBER_TAP",
+      status: "SUBMITTED",
+      submittedAt: {
+        $gte: new Date(today + "T00:00:00.000Z"),
+        $lte: new Date(today + "T23:59:59.999Z"),
+      },
+    }).sort({ coinsAwarded: -1 });
 
     res.json({
       coins: userCoins,
-      currentStreak: userStreak.currentStreak,
-      claimedStreakToday: userStreak.claimedStreakToday,
-      claimedDailyRewardToday: !!todayClaimTransaction,
+      isActive: settings.isActive,
+      attemptsPerSession: settings.attemptsPerSession,
+      coinsPerCorrect: settings.coinsPerCorrect,
+      maxSessionsPerDay: settings.maxSessionsPerDay,
+      bonusCoins: settings.bonusCoins,
       dailyRewardAmount: settings.dailyRewardAmount,
-      coinsPerTreat: settings.coinsPerTreat,
-      maxCoinsPerGame: settings.maxCoinsPerGame || 50,
-      rank: rankStr,
+      sessionsPlayedToday,
+      sessionsRemaining: Math.max(0, settings.maxSessionsPerDay - sessionsPlayedToday),
+      claimedDailyRewardToday: !!todayClaim,
       nextReward,
-      bestScore: bestResult ? bestResult.score : 0,
-      missions,
-      missionsCompletedSummary: `${completedCount}/${activeTemplates.length}`
+      bestSessionCoins: bestSession ? bestSession.coinsAwarded : 0,
     });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 };
 
-// Redeems coins for a specific reward tier coupon
-exports.redeemReward = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const { rewardTierId } = req.body;
+// ─── Reward Tiers ─────────────────────────────────────────────────────────────
 
-    const rewardTier = await RewardTier.findOne({ _id: rewardTierId, isActive: true });
-    if (!rewardTier) {
-      return res.status(404).json({ error: "Reward tier option not found" });
-    }
-
-    const user = await User.findById(userId);
-    if (!user || (user.coins || 0) < rewardTier.coinsRequired) {
-      return res.status(400).json({ error: "Insufficient coin balance for redemption" });
-    }
-
-    // 1. Verify Weekly / Monthly Limits
-    const startOfWeek = new Date();
-    startOfWeek.setDate(startOfWeek.getDate() - 7);
-    const weeklyRedemptionsCount = await CouponRedemption.countDocuments({
-      userId,
-      rewardTierId,
-      redeemedAt: { $gte: startOfWeek }
-    });
-    if (weeklyRedemptionsCount >= rewardTier.weeklyLimit) {
-      return res.status(400).json({ error: `Weekly redemption limit reached for this reward (${rewardTier.weeklyLimit} time)` });
-    }
-
-    const startOfMonth = new Date();
-    startOfMonth.setDate(startOfMonth.getDate() - 30);
-    const monthlyRedemptionsCount = await CouponRedemption.countDocuments({
-      userId,
-      rewardTierId,
-      redeemedAt: { $gte: startOfMonth }
-    });
-    if (monthlyRedemptionsCount >= rewardTier.monthlyLimit) {
-      return res.status(400).json({ error: `Monthly redemption limit reached for this reward (${rewardTier.monthlyLimit} times)` });
-    }
-
-    // 2. Generate Coupon code prefix PUPPY
-    const codeSuffix = crypto.randomBytes(4).toString("hex").toUpperCase();
-    const couponCode = `PUPPY-${rewardTier.couponValue}-${codeSuffix}`;
-
-    // Create entry in standard Coupon model
-    const newCoupon = new Coupon({
-      code: couponCode,
-      discountType: "FLAT",
-      discountValue: rewardTier.couponValue,
-      minOrderValue: 0,
-      isActive: true,
-      usageLimit: 1, // single-use coupon
-      validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // valid for 30 days
-      isGameReward: true
-    });
-    await newCoupon.save();
-
-    // 3. Deduct coins and log transaction
-    await recordCoinTransaction({
-      userId,
-      type: "COUPON_REDEMPTION",
-      coins: -rewardTier.coinsRequired,
-      source: `Redeemed ${rewardTier.title}`,
-      metadata: { couponCode, rewardTierId: rewardTier._id }
-    });
-
-    // 4. Save CouponRedemption log
-    const redemption = new CouponRedemption({
-      userId,
-      rewardTierId: rewardTier._id,
-      coinsSpent: rewardTier.coinsRequired,
-      couponCode,
-      couponValue: rewardTier.couponValue
-    });
-    await redemption.save();
-
-    const updatedUser = await User.findById(userId);
-    res.json({
-      success: true,
-      couponCode,
-      newBalance: updatedUser ? (updatedUser.coins || 0) : 0
-    });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-};
-
-// Gets the list of available reward tiers
 exports.getRewardTiers = async (req, res) => {
   try {
     const list = await RewardTier.find({ isActive: true }).sort({ sortOrder: 1, coinsRequired: 1 });
@@ -774,3 +510,97 @@ exports.getRewardTiers = async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 };
+
+// ─── Redeem Coins for Coupon ──────────────────────────────────────────────────
+
+exports.redeemReward = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { rewardTierId } = req.body;
+
+    const rewardTier = await RewardTier.findOne({ _id: rewardTierId, isActive: true });
+    if (!rewardTier) {
+      return res.status(404).json({ error: "Reward tier not found" });
+    }
+
+    const user = await User.findById(userId);
+    if (!user || (user.coins || 0) < rewardTier.coinsRequired) {
+      return res.status(400).json({ error: "Insufficient coins for redemption" });
+    }
+
+    // Weekly limit
+    const startOfWeek = new Date();
+    startOfWeek.setDate(startOfWeek.getDate() - 7);
+    const weeklyCount = await CouponRedemption.countDocuments({
+      userId,
+      rewardTierId,
+      redeemedAt: { $gte: startOfWeek },
+    });
+    if (weeklyCount >= rewardTier.weeklyLimit) {
+      return res.status(400).json({
+        error: `Weekly redemption limit reached for this reward (${rewardTier.weeklyLimit} times)`,
+      });
+    }
+
+    // Monthly limit
+    const startOfMonth = new Date();
+    startOfMonth.setDate(startOfMonth.getDate() - 30);
+    const monthlyCount = await CouponRedemption.countDocuments({
+      userId,
+      rewardTierId,
+      redeemedAt: { $gte: startOfMonth },
+    });
+    if (monthlyCount >= rewardTier.monthlyLimit) {
+      return res.status(400).json({
+        error: `Monthly redemption limit reached for this reward (${rewardTier.monthlyLimit} times)`,
+      });
+    }
+
+    const codeSuffix = crypto.randomBytes(4).toString("hex").toUpperCase();
+    const couponCode = `CHATORA-${rewardTier.couponValue}-${codeSuffix}`;
+
+    const newCoupon = new Coupon({
+      code: couponCode,
+      discountType: "FLAT",
+      discountValue: rewardTier.couponValue,
+      minOrderValue: 0,
+      isActive: true,
+      usageLimit: 1,
+      validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      isGameReward: true,
+    });
+    await newCoupon.save();
+
+    await recordCoinTransaction({
+      userId,
+      type: "COUPON_REDEMPTION",
+      coins: -rewardTier.coinsRequired,
+      source: `Redeemed ${rewardTier.title}`,
+      metadata: { couponCode, rewardTierId: rewardTier._id },
+    });
+
+    const redemption = new CouponRedemption({
+      userId,
+      rewardTierId: rewardTier._id,
+      coinsSpent: rewardTier.coinsRequired,
+      couponCode,
+      couponValue: rewardTier.couponValue,
+    });
+    await redemption.save();
+
+    const updatedUser = await User.findById(userId);
+    res.json({
+      success: true,
+      couponCode,
+      newBalance: updatedUser ? updatedUser.coins || 0 : 0,
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+};
+
+// ─── Legacy stubs (kept so old routes don't 500) ──────────────────────────────
+
+exports.submitGame = exports.endGame; // route alias
+exports.claimMissionReward = async (req, res) => res.status(410).json({ error: "Missions removed in this version" });
+exports.claimStreakReward = async (req, res) => res.status(410).json({ error: "Streaks removed in this version" });

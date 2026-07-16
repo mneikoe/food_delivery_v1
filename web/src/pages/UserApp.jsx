@@ -63,6 +63,7 @@ import {
   validateUserCoupon,
   createRazorpayOrder,
   verifyRazorpayPayment,
+  getUserGameSettings,
 } from '../api/userApi';
 import logoImage from '../assets/logo-chatora.png';
 import { supabase } from '../services/supabase';
@@ -72,8 +73,6 @@ import FoodCard from '../components/user/FoodCard';
 import QuantitySelector from '../components/user/QuantitySelector';
 import './UserApp.css';
 
-const DELIVERY_FEE = 28;
-const TAX_PERCENT = 0.05;
 const WHATSAPP_PHONE_REGEX = /^\+?[1-9]\d{9,14}$/;
 const FALLBACK_FOOD_IMAGE =
   'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=1600&auto=format&fit=crop';
@@ -168,6 +167,9 @@ export default function UserApp() {
   const [orders, setOrders] = useState([]);
   const [coupons, setCoupons] = useState([]);
 
+  const [deliveryFee, setDeliveryFee] = useState(28);
+  const [taxPercent, setTaxPercent] = useState(5);
+
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(undefined);
   const [profileModalOpen, setProfileModalOpen] = useState(false);
@@ -245,7 +247,7 @@ export default function UserApp() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [p, a, c, pr, ca, o, cp, of] = await Promise.all([
+      const [p, a, c, pr, ca, o, cp, of, gs] = await Promise.all([
         getUserProfile(),
         getUserAddresses(),
         getUserCategories(),
@@ -254,6 +256,7 @@ export default function UserApp() {
         getUserOrders(),
         getUserCoupons(),
         getUserOffers(),
+        getUserGameSettings(),
       ]);
 
       setProfile(p.data);
@@ -264,6 +267,11 @@ export default function UserApp() {
       setOrders(o.data || []);
       setCoupons(cp.data || []);
       setOffers(of.data || []);
+      
+      if (gs?.data) {
+        if (gs.data.deliveryFee !== undefined) setDeliveryFee(gs.data.deliveryFee);
+        if (gs.data.taxPercent !== undefined) setTaxPercent(gs.data.taxPercent);
+      }
     } catch (error) {
       message.error(error.response?.data?.error || 'Failed to load data');
     } finally {
@@ -419,8 +427,8 @@ export default function UserApp() {
   }, [cart.items]);
 
   const discount = appliedCoupon?.discount || 0;
-  const tax = useMemo(() => ((cart.subtotal || 0) + DELIVERY_FEE) * TAX_PERCENT, [cart.subtotal]);
-  const payable = Math.max((cart.subtotal || 0) + DELIVERY_FEE + tax - discount, 0);
+  const tax = useMemo(() => ((cart.subtotal || 0) + deliveryFee) * (taxPercent / 100), [cart.subtotal, deliveryFee, taxPercent]);
+  const payable = Math.max((cart.subtotal || 0) + deliveryFee + tax - discount, 0);
 
   const isPhoneValid = useMemo(() => {
     return isValidWhatsAppPhone(profile?.phone);
@@ -1127,8 +1135,8 @@ export default function UserApp() {
 
                 <div className="checkout-summary">
                   <div><span>Subtotal:</span> <strong>₹{(cart.subtotal || 0).toFixed(2)}</strong></div>
-                  <div><span>Delivery fee:</span> <strong>₹{DELIVERY_FEE.toFixed(2)}</strong></div>
-                  <div><span>Tax:</span> <strong>₹{tax.toFixed(2)}</strong></div>
+                  <div><span>Delivery fee:</span> <strong>₹{deliveryFee.toFixed(2)}</strong></div>
+                  <div><span>Tax ({taxPercent}%):</span> <strong>₹{tax.toFixed(2)}</strong></div>
                   <div><span>Discount:</span> <strong>- ₹{discount.toFixed(2)}</strong></div>
                   <div className="checkout-total">
                     <span>Total payable ({paymentMethod === 'COD' ? 'COD' : 'Online'}):</span>

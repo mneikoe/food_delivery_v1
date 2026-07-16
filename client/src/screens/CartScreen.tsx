@@ -660,10 +660,11 @@ export default function CartScreen({ navigation }: any) {
     );
   }
 
-  const deliveryFee = 28;
+  const deliveryFee = previewData ? previewData.deliveryFee : 28;
+  const taxPercent = previewData && previewData.taxPercent !== undefined ? previewData.taxPercent : 5;
   const discount = appliedCoupon ? Math.ceil(appliedCoupon.discount) : 0;
   const subtotalWithFee = (cart.subtotal || 0) + deliveryFee;
-  const tax = Math.ceil(subtotalWithFee * 0.05); // 5% tax
+  const tax = previewData ? previewData.tax : Math.ceil(subtotalWithFee * (taxPercent / 100));
 
   const localCoinDiscount = redeemCoins ? Math.ceil(Math.floor(coins / 100) * 10) : 0;
   const coinDiscount = previewData ? previewData.coinDiscount : localCoinDiscount;
@@ -1018,7 +1019,7 @@ export default function CartScreen({ navigation }: any) {
             </View>
           )}
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Taxes & Charges (5%)</Text>
+            <Text style={styles.summaryLabel}>Taxes & Charges ({taxPercent}%)</Text>
             <Text style={styles.summaryValue}>₹{tax.toFixed(2)}</Text>
           </View>
           <View style={[styles.summaryRow, styles.totalRow]}>

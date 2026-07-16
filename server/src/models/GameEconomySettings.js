@@ -1,19 +1,16 @@
 const mongoose = require("mongoose");
 
 const gameEconomySettingsSchema = new mongoose.Schema({
-  maxDailyPlays: { type: Number, default: 5 },
-  coinsPerTreat: { type: Number, default: 5 },
-  goldenBoneSpawnChance: { type: Number, default: 0.05 },
-  goldenBoneReward: { type: Number, default: 25 },
-  streakRewards: {
-    type: Map,
-    of: Number,
-    default: { "1": 10, "2": 15, "3": 20, "4": 25, "5": 30, "6": 35, "7": 50 }
-  },
+  // --- Number Tap Game Core Settings ---
+  attemptsPerSession: { type: Number, default: 10 },   // clicks per session
+  coinsPerCorrect: { type: Number, default: 2 },        // coins per correct tap
+  maxSessionsPerDay: { type: Number, default: 3 },      // sessions a user can play per day
+  bonusCoins: { type: Number, default: 5 },             // extra coins if ALL attempts are correct
+  isActive: { type: Boolean, default: true },           // enable/disable game
+
+  // --- Coin Redemption Settings (kept from before) ---
   weeklyCoinRedemptionLimit: { type: Number, default: 500 },
   dailyRewardAmount: { type: Number, default: 10 },
-  maxCoinsPerGame: { type: Number, default: 50 },
-  isActive: { type: Boolean, default: true }
 });
 
 module.exports = mongoose.model("GameEconomySettings", gameEconomySettingsSchema);

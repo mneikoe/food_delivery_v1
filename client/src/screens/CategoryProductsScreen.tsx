@@ -16,12 +16,14 @@ import { useTheme } from '../context/ThemeContext';
 import { api } from '../api/api';
 import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../context/AlertContext';
+import { useCart } from '../context/CartContext';
 
 export default function CategoryProductsScreen({ route, navigation }: any) {
   const { token } = useAuth();
   const insets = useSafeAreaInsets();
   const { colors, tokens } = useTheme();
   const { showAlert } = useAlert();
+  const { refreshCart } = useCart();
   const styles = getStyles(colors, tokens);
   
   const categoryId = route?.params?.categoryId;
@@ -39,28 +41,24 @@ export default function CategoryProductsScreen({ route, navigation }: any) {
     }
   }, [token, categoryId]);
 
-  useEffect(() => {
-    if (token && !categoryDescription && categoryId) {
-      api.get('/user/categories').then((res) => {
-        const cat = res.data?.find((c: any) => c._id === categoryId);
-        if (cat?.description) {
-          setCategoryDescription(cat.description);
-        }
-      }).catch(err => console.warn(err));
-    }
-  }, [token, categoryId, categoryDescription]);
-
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const params: any = {};
-      if (categoryId) {
-        params.categoryId = categoryId;
+      const response = await api.get('/user/products', {
+        params: { categoryId: categoryId },
+      });
+      setProducts(response.data || []);
+      
+      // Also get category description if missing
+      if (!categoryDescription) {
+        const catRes = await api.get('/user/categories');
+        const currentCat = (catRes.data || []).find((c: any) => c._id === categoryId);
+        if (currentCat) {
+          setCategoryDescription(currentCat.description || '');
+        }
       }
-      const response = await api.get('/user/products', { params });
-      setProducts(response.data);
     } catch (error) {
-      console.error('Failed to load products:', error);
+      console.error('Failed to fetch category products:', error);
     } finally {
       setLoading(false);
     }
@@ -87,6 +85,7 @@ export default function CategoryProductsScreen({ route, navigation }: any) {
   const handleAddToCart = async (product: any) => {
     try {
       await api.post('/user/cart/items', { productId: product._id, quantity: 1 });
+      refreshCart();
       showAlert('Success', `${product.name} added to cart!`);
     } catch (err: any) {
       showAlert('Error', err?.response?.data?.error || 'Failed to add item to cart');

@@ -13,7 +13,6 @@ import ProfileScreen from '../screens/ProfileScreen';
 import ProductScreen from '../screens/ProductScreen';
 import { useTheme } from '../context/ThemeContext';
 import { useCart } from '../context/CartContext';
-import FloatingCartButton from '../components/FloatingCartButton';
 
 const Tab = createBottomTabNavigator();
 
@@ -28,7 +27,10 @@ const Tab = createBottomTabNavigator();
  *  - isVisible = cartCount > 0 AND active tab is NOT 'Cart'
  *  - When user presses the button → navigate to 'Cart' tab
  */
-function FloatingCartContainer() {
+// Tabs on which the floating cart button should NOT appear
+const HIDE_CART_TABS = new Set(['cart', 'profile']);
+
+function FloatingCartContainer({ bottomOffset }: { bottomOffset: number }) {
   const { cartCount, cartTotal } = useCart();
   const navigation = useNavigation<any>();
 
@@ -40,16 +42,17 @@ function FloatingCartContainer() {
     return activeRoute?.name ?? '';
   });
 
-  const isOnCartTab = String(activeTabName).toLowerCase() === 'cart';
+  const activeTabLower = String(activeTabName).toLowerCase();
 
-  // Show only when: cart has items AND we are NOT already on the Cart tab
-  const isVisible = cartCount > 0 && !isOnCartTab;
+  // Hide on Cart and Profile tabs — they have their own bottom actions
+  const isVisible = cartCount > 0 && !HIDE_CART_TABS.has(activeTabLower);
 
   return (
     <FloatingCartButton
       cartCount={cartCount}
       cartTotal={cartTotal}
       isVisible={isVisible}
+      bottomOffset={bottomOffset}
       onPress={() => navigation.navigate('Cart')}
     />
   );
@@ -58,8 +61,16 @@ function FloatingCartContainer() {
 export default function BottomTabs() {
   const insets = useSafeAreaInsets();
   const bottomPadding = Math.max(insets.bottom, 6);
+  const tabBarHeight = 60 + bottomPadding;
   const { colors, tokens, isDark } = useTheme();
   const styles = getStyles(colors, tokens, isDark);
+  
+  // Cart state for bottom tab badge
+  const { cartCount, refreshCart } = useCart();
+
+  React.useEffect(() => {
+    refreshCart();
+  }, [refreshCart]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -70,7 +81,7 @@ export default function BottomTabs() {
             styles.tabBar,
             {
               paddingBottom: bottomPadding,
-              height: 60 + bottomPadding,
+              height: tabBarHeight,
             },
           ],
           tabBarActiveTintColor: tokens.colors.primary,
@@ -119,6 +130,14 @@ export default function BottomTabs() {
             tabBarIcon: ({ color, size }) => (
               <Ionicons name="cart-outline" size={size || 24} color={color} />
             ),
+            // Conditionally show tab badge if items are in the cart
+            tabBarBadge: cartCount > 0 ? cartCount : undefined,
+            tabBarBadgeStyle: {
+              backgroundColor: '#FF9800',
+              color: '#FFFFFF',
+              fontSize: 10,
+              fontWeight: 'bold',
+            },
           }}
         />
         <Tab.Screen
@@ -131,14 +150,6 @@ export default function BottomTabs() {
           }}
         />
       </Tab.Navigator>
-
-      {/*
-        FloatingCartContainer is rendered as a sibling to Tab.Navigator,
-        but still inside the Tab.Navigator's parent View.
-        Because it's a descendant of the Tab.Navigator's provider context,
-        useNavigationState and useNavigation work correctly here.
-      */}
-      <FloatingCartContainer />
     </View>
   );
 }

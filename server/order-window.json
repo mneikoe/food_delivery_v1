@@ -1,0 +1,7 @@
+{
+  "orderWindowEnabled": true,
+  "orderWindowStart": "00:00",
+  "orderWindowEnd": "23:59",
+  "codActive": false,
+  "onlineActive": true
+}

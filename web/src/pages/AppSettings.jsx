@@ -34,6 +34,8 @@ export default function AppSettings() {
   const [maxPlaysPerDay, setMaxPlaysPerDay] = useState(5);
   const [referrerReward, setReferrerReward] = useState(100);
   const [referredReward, setReferredReward] = useState(50);
+  const [deliveryFee, setDeliveryFee] = useState(28);
+  const [taxPercent, setTaxPercent] = useState(5);
   const [coinsSaving, setCoinsSaving] = useState(false);
 
 
@@ -251,6 +253,8 @@ export default function AppSettings() {
         if (res.data.maxPlaysPerDay) setMaxPlaysPerDay(res.data.maxPlaysPerDay);
         if (res.data.referrerReward !== undefined) setReferrerReward(res.data.referrerReward);
         if (res.data.referredReward !== undefined) setReferredReward(res.data.referredReward);
+        if (res.data.deliveryFee !== undefined) setDeliveryFee(res.data.deliveryFee);
+        if (res.data.taxPercent !== undefined) setTaxPercent(res.data.taxPercent);
       }
     } catch (e) {
       console.error('Failed to fetch coin settings:', e);
@@ -265,8 +269,10 @@ export default function AppSettings() {
         maxPlaysPerDay: Number(maxPlaysPerDay),
         referrerReward: Number(referrerReward),
         referredReward: Number(referredReward),
+        deliveryFee: Number(deliveryFee),
+        taxPercent: Number(taxPercent),
       });
-      message.success('Coin and Referral settings updated successfully!');
+      message.success('System pricing & coin settings updated successfully!');
     } catch (e) {
       message.error(e.response?.data?.error || 'Failed to update coin settings');
     } finally {
@@ -531,17 +537,40 @@ export default function AppSettings() {
         title={
           <Space>
             <GiftOutlined style={{ fontSize: 22, color: '#fa8c16' }} />
-            <span>Coin & Referral Settings</span>
+            <span>Pricing, Coin & Referral Settings</span>
           </Space>
         }
         style={{ marginBottom: 24, boxShadow: '0 4px 12px rgba(0,0,0,0.05)', borderRadius: 12 }}
         styles={{ body: { paddingTop: 16 } }}
       >
         <Paragraph type="secondary" style={{ marginBottom: 16 }}>
-          Set the conversion rate for coins, daily limits, and rewards for the Refer & Earn program.
+          Set system-wide pricing constants (delivery charge, tax %) along with referral program rewards.
         </Paragraph>
         <Row gutter={16}>
-          <Col xs={24} sm={12} md={6}>
+          <Col xs={24} sm={12} md={8}>
+            <div style={{ marginBottom: 12 }}>
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>Delivery Charge (₹):</Text>
+              <InputNumber
+                min={0}
+                value={deliveryFee}
+                onChange={setDeliveryFee}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </Col>
+          <Col xs={24} sm={12} md={8}>
+            <div style={{ marginBottom: 12 }}>
+              <Text strong style={{ display: 'block', marginBottom: 6 }}>GST / Tax Percentage (%):</Text>
+              <InputNumber
+                min={0}
+                max={100}
+                value={taxPercent}
+                onChange={setTaxPercent}
+                style={{ width: '100%' }}
+              />
+            </div>
+          </Col>
+          <Col xs={24} sm={12} md={8}>
             <div style={{ marginBottom: 12 }}>
               <Text strong style={{ display: 'block', marginBottom: 6 }}>Coins Per Rupee (₹1 value):</Text>
               <InputNumber
@@ -552,18 +581,9 @@ export default function AppSettings() {
               />
             </div>
           </Col>
-          <Col xs={24} sm={12} md={6}>
-            <div style={{ marginBottom: 12 }}>
-              <Text strong style={{ display: 'block', marginBottom: 6 }}>Max Plays Per Day:</Text>
-              <InputNumber
-                min={1}
-                value={maxPlaysPerDay}
-                onChange={setMaxPlaysPerDay}
-                style={{ width: '100%' }}
-              />
-            </div>
-          </Col>
-          <Col xs={24} sm={12} md={6}>
+        </Row>
+        <Row gutter={16} style={{ marginTop: 8 }}>
+          <Col xs={24} sm={12} md={12}>
             <div style={{ marginBottom: 12 }}>
               <Text strong style={{ display: 'block', marginBottom: 6 }}>Referrer Reward (Coins):</Text>
               <InputNumber
@@ -574,7 +594,7 @@ export default function AppSettings() {
               />
             </div>
           </Col>
-          <Col xs={24} sm={12} md={6}>
+          <Col xs={24} sm={12} md={12}>
             <div style={{ marginBottom: 12 }}>
               <Text strong style={{ display: 'block', marginBottom: 6 }}>Referred User Reward (Coins):</Text>
               <InputNumber
@@ -586,14 +606,14 @@ export default function AppSettings() {
             </div>
           </Col>
         </Row>
-        <div style={{ marginTop: 8 }}>
+        <div style={{ marginTop: 12 }}>
           <Button
             type="primary"
             onClick={handleCoinSettingsSave}
             loading={coinsSaving}
             icon={<SaveOutlined />}
           >
-            Save Coin & Referral Settings
+            Save Pricing & Referral Settings
           </Button>
         </div>
       </Card>
@@ -620,55 +640,83 @@ export default function AppSettings() {
                 onFinish={handleGamificationSettingsSave}
                 style={{ marginTop: 16 }}
               >
+                <div style={{ background: '#f0f5ff', border: '1px solid #adc6ff', borderRadius: 8, padding: '12px 16px', marginBottom: 16 }}>
+                  <Text strong style={{ color: '#2f54eb' }}>🎯 Number Tap Game Settings</Text>
+                  <br />
+                  <Text type="secondary" style={{ fontSize: 13 }}>
+                    These settings control the Number Tap coin-earning game in the mobile app.
+                  </Text>
+                </div>
                 <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item label="Max Plays Per Day (Server Authoritative)" name="maxDailyPlays" required>
-                      <InputNumber min={1} style={{ width: '100%' }} />
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      label="Taps Per Session (Attempts)"
+                      name="attemptsPerSession"
+                      required
+                      tooltip="How many number taps a user gets per session"
+                    >
+                      <InputNumber min={1} max={30} style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
-                    <Form.Item label="Coins Per Catch/Treat" name="coinsPerTreat" required>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      label="Coins Per Correct Tap"
+                      name="coinsPerCorrect"
+                      required
+                      tooltip="Coins earned for each correct number tap"
+                    >
                       <InputNumber min={1} style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
                 </Row>
                 <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item label="Golden Bone Spawn Chance (0.0 to 1.0)" name="goldenBoneSpawnChance" required>
-                      <InputNumber min={0} max={1} step={0.01} style={{ width: '100%' }} />
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      label="Sessions Per Day (Per User)"
+                      name="maxSessionsPerDay"
+                      required
+                      tooltip="How many times a user can play the game per day"
+                    >
+                      <InputNumber min={1} max={20} style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
-                    <Form.Item label="Golden Bone Reward Coins" name="goldenBoneReward" required>
-                      <InputNumber min={1} style={{ width: '100%' }} />
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      label="Perfect Session Bonus Coins"
+                      name="bonusCoins"
+                      required
+                      tooltip="Extra coins awarded if the user gets ALL taps correct in a session"
+                    >
+                      <InputNumber min={0} style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
                 </Row>
                 <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item label="Daily Free Check-In Coins" name="dailyRewardAmount" required>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      label="Daily Free Check-In Coins"
+                      name="dailyRewardAmount"
+                      required
+                    >
                       <InputNumber min={1} style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
-                  <Col span={12}>
-                    <Form.Item label="Weekly Coin Redemption Limit" name="weeklyCoinRedemptionLimit" required>
+                  <Col xs={24} sm={12}>
+                    <Form.Item
+                      label="Weekly Coin Redemption Limit"
+                      name="weeklyCoinRedemptionLimit"
+                      required
+                    >
                       <InputNumber min={1} style={{ width: '100%' }} />
                     </Form.Item>
                   </Col>
                 </Row>
-                <Row gutter={16}>
-                  <Col span={12}>
-                    <Form.Item label="Max Coins Reward Per Game Session" name="maxCoinsPerGame" required>
-                      <InputNumber min={10} style={{ width: '100%' }} />
-                    </Form.Item>
-                  </Col>
-                </Row>
-                <Form.Item label="Gamification System Active" name="isActive" valuePropName="checked">
-                  <Switch />
+                <Form.Item label="Game Active" name="isActive" valuePropName="checked">
+                  <Switch checkedChildren="ON" unCheckedChildren="OFF" />
                 </Form.Item>
                 <Form.Item>
                   <Button type="primary" htmlType="submit" loading={savingGamification} icon={<SaveOutlined />}>
-                    Save Settings
+                    Save Game Settings
                   </Button>
                 </Form.Item>
               </Form>
@@ -714,44 +762,6 @@ export default function AppSettings() {
           },
           {
             key: '3',
-            label: <span><TrophyOutlined />Daily Missions</span>,
-            children: (
-              <div style={{ marginTop: 16 }}>
-                <Button 
-                  type="primary" 
-                  icon={<PlusOutlined />} 
-                  onClick={() => { setEditingMission(null); missionForm.resetFields(); setMissionModalVisible(true); }}
-                  style={{ marginBottom: 16 }}
-                >
-                  Add Mission Blueprints
-                </Button>
-                <Table 
-                  dataSource={missionsList} 
-                  rowKey="_id"
-                  columns={[
-                    { title: 'Mission Name', dataIndex: 'name', key: 'name' },
-                    { title: 'Type', dataIndex: 'type', key: 'type', render: val => <Tag color="blue">{val}</Tag> },
-                    { title: 'Difficulty', dataIndex: 'difficulty', key: 'difficulty', render: val => <Tag color={val === 'EASY' ? 'green' : val === 'MEDIUM' ? 'orange' : 'red'}>{val}</Tag> },
-                    { title: 'Target', dataIndex: 'target', key: 'target' },
-                    { title: 'Coins Reward', dataIndex: 'rewardCoins', key: 'rewardCoins', render: val => `🪙 ${val}` },
-                    { title: 'Active', dataIndex: 'isActive', key: 'isActive', render: val => val ? <Tag color="green">Active</Tag> : <Tag color="red">Inactive</Tag> },
-                    {
-                      title: 'Actions',
-                      key: 'actions',
-                      render: (_, record) => (
-                        <Space>
-                          <Button size="small" icon={<EditOutlined />} onClick={() => { setEditingMission(record); missionForm.setFieldsValue(record); setMissionModalVisible(true); }} />
-                          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleMissionDelete(record._id)} />
-                        </Space>
-                      )
-                    }
-                  ]} 
-                />
-              </div>
-            )
-          },
-          {
-            key: '4',
             label: <span><HistoryOutlined />Accounting Ledger</span>,
             children: (
               <div style={{ marginTop: 16 }}>

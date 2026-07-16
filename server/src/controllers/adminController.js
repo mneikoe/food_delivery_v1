@@ -821,31 +821,49 @@ exports.getCoinSettings = async (req, res) => {
 exports.updateCoinSettings = async (req, res) => {
   try {
     const coinSettings = require("../utils/coinSettings");
-    const { coinsPerRupee, maxPlaysPerDay, referrerReward, referredReward } = req.body;
-    const updated = coinSettings.setCoinSettings({ coinsPerRupee, maxPlaysPerDay, referrerReward, referredReward });
+    const { coinsPerRupee, maxPlaysPerDay, referrerReward, referredReward, deliveryFee, taxPercent } = req.body;
+    const updated = coinSettings.setCoinSettings({ coinsPerRupee, maxPlaysPerDay, referrerReward, referredReward, deliveryFee, taxPercent });
     res.json(updated);
   } catch (error) {
-
     res.status(400).json({ error: error.message });
   }
 };
 
-// Singleton GameEconomySettings Handlers
+// Singleton GameEconomySettings Handlers — Number Tap Game
 exports.getGamificationSettings = async (req, res) => {
   try {
     let settings = await GameEconomySettings.findOne({ isActive: true });
     if (!settings) {
       settings = new GameEconomySettings({
-        maxDailyPlays: 5,
-        coinsPerTreat: 5,
-        goldenBoneSpawnChance: 0.05,
-        goldenBoneReward: 25,
-        streakRewards: { "1": 10, "2": 15, "3": 20, "4": 25, "5": 30, "6": 35, "7": 50 },
+        attemptsPerSession: 10,
+        coinsPerCorrect: 2,
+        maxSessionsPerDay: 3,
+        bonusCoins: 5,
         weeklyCoinRedemptionLimit: 500,
         dailyRewardAmount: 10,
-        maxCoinsPerGame: 50,
-        isActive: true
+        isActive: true,
       });
+      await settings.save();
+      return res.json(settings);
+    }
+
+    // Migrate missing properties if document exists
+    let needsSave = false;
+    const DEFAULTS = {
+      attemptsPerSession: 10,
+      coinsPerCorrect: 2,
+      maxSessionsPerDay: 3,
+      bonusCoins: 5,
+      weeklyCoinRedemptionLimit: 500,
+      dailyRewardAmount: 10,
+    };
+    for (const [key, defaultVal] of Object.entries(DEFAULTS)) {
+      if (settings[key] === undefined || settings[key] === null) {
+        settings[key] = defaultVal;
+        needsSave = true;
+      }
+    }
+    if (needsSave) {
       await settings.save();
     }
     res.json(settings);
@@ -860,7 +878,16 @@ exports.updateGamificationSettings = async (req, res) => {
     if (!settings) {
       settings = new GameEconomySettings({ isActive: true });
     }
-    Object.assign(settings, req.body);
+    // Whitelist allowed fields to prevent accidental corruption
+    const allowed = [
+      'attemptsPerSession', 'coinsPerCorrect', 'maxSessionsPerDay',
+      'bonusCoins', 'weeklyCoinRedemptionLimit', 'dailyRewardAmount', 'isActive',
+    ];
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) {
+        settings[key] = req.body[key];
+      }
+    }
     await settings.save();
     res.json(settings);
   } catch (error) {

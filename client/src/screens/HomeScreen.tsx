@@ -23,7 +23,7 @@ import { api } from '../api/api';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useResponsive } from '../hooks/useResponsive';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import JumpGameModal from '../components/JumpGameModal';
+import NumberTapGameModal from '../components/NumberTapGameModal';
 import ResponsiveContainer from '../components/ResponsiveContainer';
 import LinearGradient from 'react-native-linear-gradient';
 
@@ -707,8 +707,8 @@ export default function HomeScreen({ navigation, route }: any) {
               >
                 <View style={styles.spinBannerContent}>
                   <View style={styles.spinBannerLeft}>
-                    <Text style={styles.spinBannerTitle}>🐶 Feed the Puppy</Text>
-                    <Text style={styles.spinBannerSubtitle}>Play and catch treats to earn Chatora Coins!</Text>
+                    <Text style={styles.spinBannerTitle}>🎯 Number Tap</Text>
+                    <Text style={styles.spinBannerSubtitle}>Tap the right number to earn Chatora Coins!</Text>
                   </View>
                   <Ionicons name="paw" size={32} color="#FBBF24" />
                 </View>
@@ -865,8 +865,8 @@ export default function HomeScreen({ navigation, route }: any) {
           onClose={() => setShowManualSelector(false)}
         />
 
-        {/* Jumper Game Modal */}
-        <JumpGameModal
+        {/* Number Tap Game Modal */}
+        <NumberTapGameModal
           visible={showGameModal}
           onClose={() => setShowGameModal(false)}
           onCoinsEarned={handleCoinsEarned}
